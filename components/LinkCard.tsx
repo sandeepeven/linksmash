@@ -70,12 +70,7 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
   const handlePress = async () => {
     try {
       const url = linkData.url;
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert("Error", "Cannot open this URL");
-      }
+      await Linking.openURL(url);
     } catch (error) {
       console.error("Error opening URL:", error);
       Alert.alert("Error", "Failed to open URL");
@@ -101,13 +96,13 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
       {/* Content Section - Left Side */}
       <View style={styles.content}>
         {linkData.title ? (
-          <Text style={styles.title} numberOfLines={2}>
+          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
             {linkData.title}
           </Text>
         ) : null}
 
         {linkData.description ? (
-          <Text style={styles.description} numberOfLines={1}>
+          <Text style={styles.description} numberOfLines={2}>
             {linkData.description}
           </Text>
         ) : null}
@@ -238,6 +233,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff",
     fontWeight: "600",
-    textTransform: "capitalize",
   },
 });

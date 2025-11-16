@@ -110,10 +110,8 @@ export const EditLinkScreen: React.FC = () => {
         style={styles.container}
         contentContainerStyle={styles.content}
         enableOnAndroid
-        enableAutomaticScroll
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={24}
-        keyboardOpeningTime={0}
+        extraScrollHeight={200}
       >
         {/* URL Field (Read-only) */}
         <View style={styles.fieldContainer}>
@@ -214,16 +212,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ffffff",
   },
-  keyboardAvoider: {
-    flex: 1,
-  },
   container: {
     flex: 1,
     backgroundColor: "#ffffff",
-    marginBottom: 100,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
+    marginBottom: 200,
   },
   fieldContainer: {
     marginBottom: 24,

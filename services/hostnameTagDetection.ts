@@ -88,10 +88,18 @@ const POPULAR_HOSTNAMES: Record<string, string> = {
 };
 
 /**
- * Extracts hostname from a URL
+ * Extracts a simplified hostname label from a URL suitable for titles/tags.
+ * Examples:
+ * - https://www.luma.com -> "luma"
+ * - https://app.blinkit.com -> "blinkit"
+ * - https://youtu.be/xyz -> "youtu" (best-effort without PSL)
+ *
+ * Note: This is a best-effort extraction that returns the second-level label
+ * for common domains. It does not use a public suffix list, so multi-part TLDs
+ * like "co.uk" will resolve to "co" (acceptable for current requirements).
  *
  * @param url - The URL to extract hostname from
- * @returns string | null - The hostname or null if extraction fails
+ * @returns string | null - The simplified hostname label or null if extraction fails
  */
 function extractHostname(url: string): string | null {
   try {
@@ -101,7 +109,11 @@ function extractHostname(url: string): string | null {
     if (hostname.startsWith("www.")) {
       hostname = hostname.substring(4);
     }
-    return hostname;
+    const parts = hostname.split(".").filter(Boolean);
+    if (parts.length === 0) return null;
+    if (parts.length === 1) return parts[0]; // e.g., localhost or single label
+    // Return the second-to-last label as a simple base name
+    return parts[parts.length - 2];
   } catch {
     return null;
   }
@@ -153,4 +165,3 @@ export function detectHostnameTag(
   // Fallback to category-based detection
   return detectLinkTag(url, metadata);
 }
-

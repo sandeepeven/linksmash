@@ -9,7 +9,12 @@
  */
 
 import { LinkData } from "../types/link";
-import { parseLink, parseBlinkItStyle, parseFlipkartStyle, extractHostname } from "./linkParser";
+import {
+  parseLink,
+  parseBlinkItStyle,
+  parseFlipkartStyle,
+  extractHostname,
+} from "./linkParser";
 import { shouldUseLinkPreview, getDefaultImageUrl } from "./platformConfig";
 import { detectHostnameTag } from "./hostnameTagDetection";
 import { fetchLinkMetadata } from "./metadata";
@@ -67,11 +72,11 @@ export async function processLink(
   if (useLinkPreview && apiKey) {
     try {
       const apiMetadata = await fetchLinkMetadata(url, apiKey);
-      
+
       // Merge API metadata with parsed data
       // Prefer parsed title/description if they exist, otherwise use API data
-      title = title || apiMetadata.title || null;
-      description = description || apiMetadata.description || null;
+      title = apiMetadata.title || title || null;
+      description = apiMetadata.description || description || null;
       image = apiMetadata.image || defaultImageUrl || null;
     } catch (error) {
       console.warn("Link preview API failed, using parsed data:", error);
@@ -84,10 +89,11 @@ export async function processLink(
   }
 
   // Step 5: Detect tag (p0: hostname-based, fallback to category)
-  const tag = detectHostnameTag(url, {
-    title: title || null,
-    description: description || null,
-  }) || "general";
+  const tag =
+    detectHostnameTag(url, {
+      title: title || null,
+      description: description || null,
+    }) || "general";
 
   // Step 6: Build final link data
   const linkData: LinkData = {
@@ -143,10 +149,11 @@ export function processLinkWithoutAPI(
   }
 
   // Detect tag
-  const tag = detectHostnameTag(url, {
-    title: title || null,
-    description: description || null,
-  }) || "general";
+  const tag =
+    detectHostnameTag(url, {
+      title: title || null,
+      description: description || null,
+    }) || "general";
 
   // Get default image if available
   const defaultImageUrl = getDefaultImageUrl(url);
@@ -162,4 +169,3 @@ export function processLinkWithoutAPI(
     metadataFetched: false,
   };
 }
-

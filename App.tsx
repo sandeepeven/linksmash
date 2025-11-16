@@ -19,16 +19,21 @@ import {
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
+  useColorScheme,
 } from "react-native";
 import {
   GestureHandlerRootView,
   Swipeable,
 } from "react-native-gesture-handler";
-import { NavigationContainer, useFocusEffect } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  useFocusEffect,
+  DarkTheme as NavDarkTheme,
+  DefaultTheme as NavLightTheme,
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import ReceiveSharingIntent from "react-native-receive-sharing-intent";
 import { LinkData } from "./types/link";
-import { fetchLinkMetadata } from "./services/metadata";
 import { saveLink, getLinks, deleteLink } from "./services/storage";
 import { LinkCard } from "./components/LinkCard";
 import { SafeAreaWrapper } from "./components/SafeAreaWrapper";
@@ -54,6 +59,25 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const LINKPREVIEW_API_KEY = "da52d1650cba9ba537069b787a0c8aae";
 
 export default function App() {
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+  const theme = useMemo(
+    () => ({
+      background: isDarkMode ? "#0b0b0c" : "#ffffff",
+      surface: isDarkMode ? "#161718" : "#ffffff",
+      text: isDarkMode ? "#f2f4f7" : "#000000",
+      textMuted: isDarkMode ? "#c7c9ce" : "#666666",
+      border: isDarkMode ? "#2a2c2f" : "#e0e0e0",
+      chipBg: isDarkMode ? "#232527" : "#f2f4f7",
+      chipBorder: isDarkMode ? "#34363a" : "#d0d5dd",
+      chipSelectedBg: "#0066cc",
+      chipSelectedBorder: "#004a99",
+      errorBg: "#ff4444",
+    }),
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [links, setLinks] = useState<LinkData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [processingShare, setProcessingShare] = useState<boolean>(false);
@@ -211,7 +235,6 @@ export default function App() {
 
     // Set up listener for incoming shared content
     const processSharedFiles = async (files: any[]) => {
-      console.log("processSharedFiles>files:", files);
       if (!files || files.length === 0) {
         console.log("No shared content received from intent.");
         return;
@@ -261,6 +284,8 @@ export default function App() {
     };
 
     const successHandler = async (files: any[]) => {
+      // Ensure loader is visible immediately when a share is received
+      setProcessingShare(true);
       await processSharedFiles(files);
     };
 
@@ -311,13 +336,13 @@ export default function App() {
   );
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={isDarkMode ? NavDarkTheme : NavLightTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {
-            backgroundColor: "#ffffff",
+            backgroundColor: theme.surface,
           },
-          headerTintColor: "#000000",
+          headerTintColor: theme.text,
           headerTitleStyle: {
             fontWeight: "600",
           },
@@ -373,6 +398,24 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   renderEmptyState,
   renderLoading,
 }) => {
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+  const theme = useMemo(
+    () => ({
+      background: isDarkMode ? "#0b0b0c" : "#ffffff",
+      surface: isDarkMode ? "#161718" : "#ffffff",
+      text: isDarkMode ? "#f2f4f7" : "#000000",
+      textMuted: isDarkMode ? "#c7c9ce" : "#666666",
+      border: isDarkMode ? "#2a2c2f" : "#e0e0e0",
+      chipBg: isDarkMode ? "#232527" : "#f2f4f7",
+      chipBorder: isDarkMode ? "#34363a" : "#d0d5dd",
+      chipSelectedBg: "#0066cc",
+      chipSelectedBorder: "#004a99",
+      errorBg: "#ff4444",
+    }),
+    [isDarkMode]
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
   // Refresh links when screen comes into focus
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -415,7 +458,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   return (
     <SafeAreaWrapper style={styles.safeArea}>
       <GestureHandlerRootView style={styles.container}>
-        <StatusBar style="auto" />
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
 
         {loading ? (
           renderLoading()
@@ -516,137 +559,152 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 };
 
 /**
- * Styles for the App component
+ * Styles for the App component (dynamic by theme)
  */
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  tagBarContainer: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e0e0e0",
-    backgroundColor: "#ffffff",
-  },
-  tagBarContent: {
-    gap: 8,
-    alignItems: "center",
-  },
-  tagChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    backgroundColor: "#f2f4f7",
-    borderWidth: 1,
-    borderColor: "#d0d5dd",
-  },
-  tagChipSelected: {
-    backgroundColor: "#0066cc",
-    borderColor: "#004a99",
-  },
-  tagChipText: {
-    fontSize: 14,
-    color: "#475467",
-    fontWeight: "600",
-  },
-  tagChipTextSelected: {
-    color: "#ffffff",
-  },
-  emptyListContainer: {
-    flexGrow: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 32,
-  },
-  emptyText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333333",
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#666666",
-    textAlign: "center",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#666666",
-  },
-  processingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  processingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-  errorContainer: {
-    position: "absolute",
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: "#ff4444",
-    borderRadius: 8,
-    padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
+function createStyles(theme: {
+  background: string;
+  surface: string;
+  text: string;
+  textMuted: string;
+  border: string;
+  chipBg: string;
+  chipBorder: string;
+  chipSelectedBg: string;
+  chipSelectedBorder: string;
+  errorBg: string;
+}) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: theme.background,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  errorText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#ffffff",
-    marginRight: 12,
-  },
-  errorDismiss: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "600",
-    textDecorationLine: "underline",
-  },
-  swipeDeleteContainer: {
-    backgroundColor: "#ff4444",
-    justifyContent: "center",
-    alignItems: "flex-end",
-    paddingHorizontal: 20,
-    marginVertical: 8,
-    borderRadius: 8,
-  },
-  swipeDeleteText: {
-    color: "#ffffff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-});
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    tagBarContainer: {
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    tagBarContent: {
+      gap: 8,
+      alignItems: "center",
+    },
+    tagChip: {
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      borderRadius: 16,
+      backgroundColor: theme.chipBg,
+      borderWidth: 1,
+      borderColor: theme.chipBorder,
+    },
+    tagChipSelected: {
+      backgroundColor: theme.chipSelectedBg,
+      borderColor: theme.chipSelectedBorder,
+    },
+    tagChipText: {
+      fontSize: 14,
+      color: theme.textMuted,
+      fontWeight: "600",
+    },
+    tagChipTextSelected: {
+      color: "#ffffff",
+    },
+    emptyListContainer: {
+      flexGrow: 1,
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 32,
+    },
+    emptyText: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.text,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: theme.textMuted,
+      textAlign: "center",
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: theme.textMuted,
+    },
+    processingOverlay: {
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: "rgba(0, 0, 0, 0.7)",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 1000,
+      elevation: 1000,
+    },
+    processingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: "#ffffff",
+      fontWeight: "500",
+    },
+    errorContainer: {
+      position: "absolute",
+      bottom: 20,
+      left: 16,
+      right: 16,
+      backgroundColor: theme.errorBg,
+      borderRadius: 8,
+      padding: 16,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    errorText: {
+      flex: 1,
+      fontSize: 14,
+      color: "#ffffff",
+      marginRight: 12,
+    },
+    errorDismiss: {
+      fontSize: 14,
+      color: "#ffffff",
+      fontWeight: "600",
+      textDecorationLine: "underline",
+    },
+    swipeDeleteContainer: {
+      backgroundColor: theme.errorBg,
+      justifyContent: "center",
+      alignItems: "flex-end",
+      paddingHorizontal: 20,
+      marginVertical: 8,
+      borderRadius: 8,
+    },
+    swipeDeleteText: {
+      color: "#ffffff",
+      fontWeight: "700",
+      fontSize: 16,
+    },
+  });
+}
