@@ -1,0 +1,588 @@
+{
+  "version": "6.0",
+  "nxVersion": "17.3.2",
+  "deps": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-navigation/native": "^7.1.19",
+    "@react-navigation/native-stack": "^7.6.2",
+    "expo": "54.0.24",
+    "expo-status-bar": "~3.0.8",
+    "expo-system-ui": "~6.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "2.28.0",
+    "react-native-keyboard-aware-scroll-view": "^0.9.5",
+    "react-native-receive-sharing-intent": "^2.0.0",
+    "react-native-safe-area-context": "^5.6.2",
+    "react-native-screens": "4.16.0",
+    "@expo/config-plugins": "^54.0.2",
+    "@nx/expo": "^17.3.2",
+    "@nx/node": "^17.3.2",
+    "@types/react": "~19.1.0",
+    "nx": "^17.3.2",
+    "typescript": "~5.9.2"
+  },
+  "pathMappings": {
+    "@linksmash/expo/*": [
+      "apps/expo/*"
+    ],
+    "@linksmash/api/*": [
+      "apps/api/*"
+    ],
+    "@linksmash/shared/*": [
+      "libs/shared/*"
+    ]
+  },
+  "nxJsonPlugins": [],
+  "fileMap": {
+    "nonProjectFiles": [
+      {
+        "file": "tsconfig.base.json",
+        "hash": "17375571975275428728"
+      },
+      {
+        "file": "tsconfig.json",
+        "hash": "18388439864924501195"
+      },
+      {
+        "file": ".gitignore",
+        "hash": "10530348721903624668"
+      },
+      {
+        "file": "package.json",
+        "hash": "6934316870935002617"
+      },
+      {
+        "file": "package-lock.json",
+        "hash": "9232031090961652892"
+      },
+      {
+        "file": "nx.json",
+        "hash": "16214312163133258444"
+      }
+    ],
+    "projectFileMap": {
+      "api": [
+        {
+          "file": "apps/api/package-lock.json",
+          "hash": "16518468784499780756"
+        },
+        {
+          "file": "apps/api/package.json",
+          "hash": "12393760353737809149",
+          "deps": [
+            "npm:undici",
+            "npm:zod",
+            "npm:@types/node",
+            "npm:typescript"
+          ]
+        },
+        {
+          "file": "apps/api/project.json",
+          "hash": "9431777437149240985"
+        },
+        {
+          "file": "apps/api/src/app.ts",
+          "hash": "8671021902412615519",
+          "deps": [
+            "npm:fastify",
+            "npm:@fastify/cors"
+          ]
+        },
+        {
+          "file": "apps/api/src/controllers/metadata.controller.ts",
+          "hash": "3143116967452180720",
+          "deps": [
+            "npm:fastify",
+            "npm:zod"
+          ]
+        },
+        {
+          "file": "apps/api/src/main.ts",
+          "hash": "12274629425103790551"
+        },
+        {
+          "file": "apps/api/src/routes/metadata.ts",
+          "hash": "2233415416430830884",
+          "deps": [
+            "npm:fastify"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/cache.service.ts",
+          "hash": "15769700661607496510",
+          "deps": [
+            "npm:ioredis"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/metadata.service.ts",
+          "hash": "6312613582689945728"
+        },
+        {
+          "file": "apps/api/src/services/scraper.service.ts",
+          "hash": "2443555192216436749",
+          "deps": [
+            "npm:undici"
+          ]
+        },
+        {
+          "file": "apps/api/src/types/metadata.types.ts",
+          "hash": "14623912693423304205"
+        },
+        {
+          "file": "apps/api/src/utils/og-parser.ts",
+          "hash": "10376199394773545135",
+          "deps": [
+            "npm:cheerio"
+          ]
+        },
+        {
+          "file": "apps/api/src/utils/url-validator.ts",
+          "hash": "5850768720488688907"
+        },
+        {
+          "file": "apps/api/tsconfig.json",
+          "hash": "13049068301194499247"
+        }
+      ],
+      "expo": [
+        {
+          "file": "apps/expo/App.tsx",
+          "hash": "12998379271840299248",
+          "deps": [
+            "npm:react",
+            "npm:expo-status-bar",
+            "npm:react-native",
+            "npm:react-native-gesture-handler",
+            "npm:@react-navigation/native",
+            "npm:@react-navigation/native-stack",
+            "npm:react-native-receive-sharing-intent"
+          ]
+        },
+        {
+          "file": "apps/expo/android/.gitignore",
+          "hash": "4781979786618174016"
+        },
+        {
+          "file": "apps/expo/android/app/build.gradle",
+          "hash": "14518943380387495462"
+        },
+        {
+          "file": "apps/expo/android/app/debug.keystore",
+          "hash": "5037686243849261810"
+        },
+        {
+          "file": "apps/expo/android/app/proguard-rules.pro",
+          "hash": "4481275573118336055"
+        },
+        {
+          "file": "apps/expo/android/app/src/debug/AndroidManifest.xml",
+          "hash": "1585159791921382059"
+        },
+        {
+          "file": "apps/expo/android/app/src/debugOptimized/AndroidManifest.xml",
+          "hash": "1585159791921382059"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/AndroidManifest.xml",
+          "hash": "13359231549812551030"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/java/com/x0089/LinkSmash/MainActivity.kt",
+          "hash": "7018539975671991038"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/java/com/x0089/LinkSmash/MainApplication.kt",
+          "hash": "14674261431486563021"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable-hdpi/splashscreen_logo.png",
+          "hash": "13916299753131803515"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable-mdpi/splashscreen_logo.png",
+          "hash": "9788317024252833711"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable-xhdpi/splashscreen_logo.png",
+          "hash": "4274808844088036585"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png",
+          "hash": "587995131980308949"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png",
+          "hash": "1351462481791995065"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable/ic_launcher_background.xml",
+          "hash": "14022140464391464271"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/drawable/rn_edit_text_material.xml",
+          "hash": "4466596183044014152"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+          "hash": "4058617789617427507"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+          "hash": "4058617789617427507"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-hdpi/ic_launcher.webp",
+          "hash": "6740084283118066723"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.webp",
+          "hash": "4590547351738066573"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp",
+          "hash": "3582951747819377670"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-mdpi/ic_launcher.webp",
+          "hash": "4024883643052949357"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.webp",
+          "hash": "15522883616065460560"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp",
+          "hash": "368203472672550526"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp",
+          "hash": "11865511915642006835"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp",
+          "hash": "10915565745334957128"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp",
+          "hash": "4962347776466096142"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp",
+          "hash": "1589803074756119843"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp",
+          "hash": "1948799465364104824"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp",
+          "hash": "13297063761402972420"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp",
+          "hash": "12870647398916015625"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp",
+          "hash": "10933866323674628606"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp",
+          "hash": "15530337496604752418"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/values-night/colors.xml",
+          "hash": "5530507333983355112"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/values/colors.xml",
+          "hash": "16368569479117383245"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/values/strings.xml",
+          "hash": "6631096290705672432"
+        },
+        {
+          "file": "apps/expo/android/app/src/main/res/values/styles.xml",
+          "hash": "10246262083514520736"
+        },
+        {
+          "file": "apps/expo/android/build.gradle",
+          "hash": "9610523714574692084"
+        },
+        {
+          "file": "apps/expo/android/gradle.properties",
+          "hash": "8340627410217576497"
+        },
+        {
+          "file": "apps/expo/android/gradle/wrapper/gradle-wrapper.jar",
+          "hash": "5961704579857758315"
+        },
+        {
+          "file": "apps/expo/android/gradle/wrapper/gradle-wrapper.properties",
+          "hash": "926483970941658266"
+        },
+        {
+          "file": "apps/expo/android/gradlew",
+          "hash": "2514925563185432526"
+        },
+        {
+          "file": "apps/expo/android/gradlew.bat",
+          "hash": "7267036690545437270"
+        },
+        {
+          "file": "apps/expo/android/settings.gradle",
+          "hash": "14631496655472620980"
+        },
+        {
+          "file": "apps/expo/app.json",
+          "hash": "17684944475147653501"
+        },
+        {
+          "file": "apps/expo/assets/adaptive-icon.png",
+          "hash": "9575896263733633602"
+        },
+        {
+          "file": "apps/expo/assets/favicon.png",
+          "hash": "10556792184362654649"
+        },
+        {
+          "file": "apps/expo/assets/icon.png",
+          "hash": "9575896263733633602"
+        },
+        {
+          "file": "apps/expo/assets/splash-icon.png",
+          "hash": "12724322853316562820"
+        },
+        {
+          "file": "apps/expo/components/LinkCard.tsx",
+          "hash": "10742552796688477223",
+          "deps": [
+            "npm:react",
+            "npm:react-native",
+            "npm:@react-navigation/native",
+            "npm:@react-navigation/native-stack"
+          ]
+        },
+        {
+          "file": "apps/expo/components/SafeAreaWrapper.tsx",
+          "hash": "7623301227486684337",
+          "deps": [
+            "npm:react",
+            "npm:react-native",
+            "npm:react-native-safe-area-context"
+          ]
+        },
+        {
+          "file": "apps/expo/eas.json",
+          "hash": "40597733779502989"
+        },
+        {
+          "file": "apps/expo/index.ts",
+          "hash": "16528171701554453975",
+          "deps": [
+            "npm:expo"
+          ]
+        },
+        {
+          "file": "apps/expo/ios/.gitignore",
+          "hash": "7693209614351072706"
+        },
+        {
+          "file": "apps/expo/ios/.xcode.env",
+          "hash": "2240437479405059044"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash.xcodeproj/project.pbxproj",
+          "hash": "7096406262540166585"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash.xcodeproj/xcshareddata/xcschemes/LinkSmash.xcscheme",
+          "hash": "1631709778809685179"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash.xcworkspace/contents.xcworkspacedata",
+          "hash": "13243026021097988159"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/AppDelegate.swift",
+          "hash": "16837202117940929849"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
+          "hash": "4866021599806147855"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/AppIcon.appiconset/Contents.json",
+          "hash": "15427026913346176372"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/Contents.json",
+          "hash": "3228211763563848421"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/SplashScreenBackground.colorset/Contents.json",
+          "hash": "124223954879007729"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/SplashScreenLegacy.imageset/Contents.json",
+          "hash": "12385527687388327545"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/SplashScreenLegacy.imageset/image.png",
+          "hash": "13470885990468271842"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/SplashScreenLegacy.imageset/image@2x.png",
+          "hash": "13470885990468271842"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Images.xcassets/SplashScreenLegacy.imageset/image@3x.png",
+          "hash": "13470885990468271842"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Info.plist",
+          "hash": "14155921475576806768"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/LinkSmash-Bridging-Header.h",
+          "hash": "11108490452811459790"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/LinkSmash.entitlements",
+          "hash": "651095249993914003"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/PrivacyInfo.xcprivacy",
+          "hash": "15615932127022425439"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/SplashScreen.storyboard",
+          "hash": "17682840082512645015"
+        },
+        {
+          "file": "apps/expo/ios/LinkSmash/Supporting/Expo.plist",
+          "hash": "1393129532738616283"
+        },
+        {
+          "file": "apps/expo/ios/Podfile",
+          "hash": "5728442882638740881"
+        },
+        {
+          "file": "apps/expo/ios/Podfile.lock",
+          "hash": "9312612984504557576"
+        },
+        {
+          "file": "apps/expo/ios/Podfile.properties.json",
+          "hash": "13909360296256145169"
+        },
+        {
+          "file": "apps/expo/package.json",
+          "hash": "11228740413622848181",
+          "deps": [
+            "npm:@react-native-async-storage/async-storage",
+            "npm:@react-navigation/native",
+            "npm:@react-navigation/native-stack",
+            "npm:expo",
+            "npm:expo-status-bar",
+            "npm:expo-system-ui",
+            "npm:react",
+            "npm:react-native",
+            "npm:react-native-gesture-handler",
+            "npm:react-native-keyboard-aware-scroll-view",
+            "npm:react-native-receive-sharing-intent",
+            "npm:react-native-safe-area-context",
+            "npm:react-native-screens",
+            "npm:@expo/config-plugins",
+            "npm:@types/react",
+            "npm:typescript"
+          ]
+        },
+        {
+          "file": "apps/expo/plugins/withFixedIntentFilters.js",
+          "hash": "3973891831091188012",
+          "deps": [
+            "npm:@expo/config-plugins",
+            "npm:fs",
+            "npm:path"
+          ]
+        },
+        {
+          "file": "apps/expo/plugins/withMainActivityOnNewIntent.js",
+          "hash": "12687558396738469807",
+          "deps": [
+            "npm:@expo/config-plugins"
+          ]
+        },
+        {
+          "file": "apps/expo/project.json",
+          "hash": "16539499799645852749"
+        },
+        {
+          "file": "apps/expo/screens/EditLinkScreen.tsx",
+          "hash": "9449837494015391495",
+          "deps": [
+            "npm:react",
+            "npm:react-native",
+            "npm:@react-navigation/native",
+            "npm:@react-navigation/native-stack",
+            "npm:react-native-keyboard-aware-scroll-view"
+          ]
+        },
+        {
+          "file": "apps/expo/scripts/fix-manifest.js",
+          "hash": "3983974761538967679",
+          "deps": [
+            "npm:fs",
+            "npm:path"
+          ]
+        },
+        {
+          "file": "apps/expo/services/hostnameTagDetection.ts",
+          "hash": "7424619065621557281"
+        },
+        {
+          "file": "apps/expo/services/linkParser.ts",
+          "hash": "11477408839637940222"
+        },
+        {
+          "file": "apps/expo/services/linkProcessor.ts",
+          "hash": "16936900924982581988"
+        },
+        {
+          "file": "apps/expo/services/metadata.ts",
+          "hash": "6020797714776551341"
+        },
+        {
+          "file": "apps/expo/services/platformConfig.ts",
+          "hash": "5749845285555921919"
+        },
+        {
+          "file": "apps/expo/services/storage.ts",
+          "hash": "3053408099636646885",
+          "deps": [
+            "npm:@react-native-async-storage/async-storage"
+          ]
+        },
+        {
+          "file": "apps/expo/services/tagDetection.ts",
+          "hash": "17109504311984376325"
+        },
+        {
+          "file": "apps/expo/tsconfig.json",
+          "hash": "11834776691685565300"
+        },
+        {
+          "file": "apps/expo/types/link.ts",
+          "hash": "12551904037025711878"
+        },
+        {
+          "file": "apps/expo/package-lock.json",
+          "hash": "402404018254728959"
+        }
+      ]
+    }
+  }
+}

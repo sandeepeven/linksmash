@@ -1,0 +1,24 @@
+{
+  "name": "expo",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/expo",
+  "projectType": "application",
+  "targets": {
+    "serve": {
+      "executor": "@nx/expo:start",
+      "options": {
+        "port": 8081
+      }
+    },
+    "build": {
+      "executor": "@nx/expo:build",
+      "options": {}
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": []
+}
+
