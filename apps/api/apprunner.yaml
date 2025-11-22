@@ -1,5 +1,5 @@
 # AWS App Runner Configuration
-# 
+#
 # This file configures AWS App Runner service settings.
 # Note: App Runner can also be configured via the AWS Console.
 
@@ -11,7 +11,7 @@ build:
       - echo "Building LinkSmash API..."
       - docker build -t linksmash-api -f apps/api/Dockerfile .
 run:
-  runtime-version: 20
+  runtime-version: 22
   command: node dist/main.js
   network:
     port: 3001
@@ -28,4 +28,3 @@ run:
     # Add your Redis URL here or set it in AWS Console
     # - name: REDIS_URL
     #   value: "redis://your-redis-url:6379"
-
