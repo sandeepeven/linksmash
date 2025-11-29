@@ -27,6 +27,13 @@ let redisClient: Redis | null = null;
 export async function initializeCache(
   redisUrl: string = "redis://localhost:6379"
 ): Promise<void> {
+  // Skip Redis if URL is localhost and we're in production (likely no Redis available)
+  if (redisUrl.includes("localhost") && process.env.NODE_ENV === "production") {
+    console.log("Skipping Redis cache (localhost not available in production)");
+    redisClient = null;
+    return;
+  }
+
   try {
     redisClient = new Redis(redisUrl, {
       retryStrategy: (times) => {
@@ -36,9 +43,17 @@ export async function initializeCache(
       maxRetriesPerRequest: 3,
       enableReadyCheck: true,
       lazyConnect: true,
+      connectTimeout: 2000, // 2 second timeout
+      commandTimeout: 2000,
     });
 
-    await redisClient.connect();
+    // Use Promise.race to add a timeout to the connection
+    const connectPromise = redisClient.connect();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Redis connection timeout")), 3000)
+    );
+
+    await Promise.race([connectPromise, timeoutPromise]);
     console.log("Redis cache connected successfully");
   } catch (error) {
     console.error("Failed to connect to Redis:", error);

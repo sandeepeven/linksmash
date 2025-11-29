@@ -37,6 +37,8 @@ export async function scrapeMetadata(url: string): Promise<ParsedMetadata> {
 
   try {
     // Fetch the HTML content
+    // Note: undici fetch handles redirects automatically with redirect: "follow"
+    // maxRedirects is not a standard fetch option, undici follows redirects by default
     const response = await fetch(normalizedUrl, {
       signal: controller.signal,
       headers: {
@@ -49,7 +51,6 @@ export async function scrapeMetadata(url: string): Promise<ParsedMetadata> {
         "Upgrade-Insecure-Requests": "1",
       },
       redirect: "follow",
-      maxRedirects: 5,
     });
 
     clearTimeout(timeoutId);

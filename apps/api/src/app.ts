@@ -5,7 +5,7 @@
  * Sets up CORS, error handling, and registers routes.
  */
 
-import Fastify from "fastify";
+import Fastify, { FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { metadataRoutes } from "./routes/metadata";
 import { initializeCache, closeCache } from "./services/cache.service";
@@ -15,7 +15,7 @@ import { initializeCache, closeCache } from "./services/cache.service";
  *
  * @returns Promise<FastifyInstance> - Configured Fastify instance
  */
-export async function createApp(): Promise<Fastify.FastifyInstance> {
+export async function createApp(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || "info",
@@ -45,9 +45,12 @@ export async function createApp(): Promise<Fastify.FastifyInstance> {
     });
   });
 
-  // Initialize Redis cache
+  // Initialize Redis cache asynchronously (non-blocking)
+  // Don't await - let it initialize in the background so server can start immediately
   const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-  await initializeCache(redisUrl);
+  initializeCache(redisUrl).catch((error) => {
+    app.log.warn("Redis cache initialization failed (will continue without cache):", error);
+  });
 
   // Graceful shutdown handler
   const shutdown = async () => {
