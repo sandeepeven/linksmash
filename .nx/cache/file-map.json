@@ -37,40 +37,69 @@
   "fileMap": {
     "nonProjectFiles": [
       {
-        "file": "tsconfig.base.json",
-        "hash": "17375571975275428728"
-      },
-      {
         "file": "tsconfig.json",
         "hash": "18388439864924501195"
       },
       {
-        "file": ".gitignore",
-        "hash": "10530348721903624668"
-      },
-      {
-        "file": "package.json",
-        "hash": "6934316870935002617"
+        "file": "tsconfig.base.json",
+        "hash": "17375571975275428728"
       },
       {
         "file": "package-lock.json",
         "hash": "9232031090961652892"
       },
       {
+        "file": "DEPLOYMENT.md",
+        "hash": "8100391107675265191"
+      },
+      {
         "file": "nx.json",
         "hash": "16214312163133258444"
+      },
+      {
+        "file": ".vscode/launch.json",
+        "hash": "8104523611757401046"
+      },
+      {
+        "file": "package.json",
+        "hash": "6934316870935002617"
+      },
+      {
+        "file": ".gitignore",
+        "hash": "8212815994430160285"
       }
     ],
     "projectFileMap": {
       "api": [
         {
+          "file": "apps/api/.dockerignore",
+          "hash": "3522700510043181665"
+        },
+        {
+          "file": "apps/api/APP_RUNNER_DEPLOY.md",
+          "hash": "9684106819330823189"
+        },
+        {
+          "file": "apps/api/Dockerfile",
+          "hash": "3934177106086025387"
+        },
+        {
+          "file": "apps/api/apprunner.yaml",
+          "hash": "15222841496334442386"
+        },
+        {
+          "file": "apps/api/deploy-to-ecr.sh",
+          "hash": "1621581280366452615"
+        },
+        {
           "file": "apps/api/package-lock.json",
-          "hash": "16518468784499780756"
+          "hash": "5451237654038836839"
         },
         {
           "file": "apps/api/package.json",
-          "hash": "12393760353737809149",
+          "hash": "9077853726144030512",
           "deps": [
+            "npm:tslib",
             "npm:undici",
             "npm:zod",
             "npm:@types/node",
@@ -83,7 +112,7 @@
         },
         {
           "file": "apps/api/src/app.ts",
-          "hash": "8671021902412615519",
+          "hash": "8600213887959581199",
           "deps": [
             "npm:fastify",
             "npm:@fastify/cors"
@@ -99,7 +128,7 @@
         },
         {
           "file": "apps/api/src/main.ts",
-          "hash": "12274629425103790551"
+          "hash": "6306584583078837130"
         },
         {
           "file": "apps/api/src/routes/metadata.ts",
@@ -110,18 +139,92 @@
         },
         {
           "file": "apps/api/src/services/cache.service.ts",
-          "hash": "15769700661607496510",
+          "hash": "17915333644695131943",
           "deps": [
             "npm:ioredis"
           ]
         },
         {
           "file": "apps/api/src/services/metadata.service.ts",
-          "hash": "6312613582689945728"
+          "hash": "5506372162071731757"
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/base-extractor.ts",
+          "hash": "9347491965072656004"
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/blinkit-extractor.ts",
+          "hash": "10552770103363831531",
+          "deps": [
+            "npm:cheerio",
+            "npm:undici"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/blocked-extractor.ts",
+          "hash": "9428521428915215373"
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/default-extractor.ts",
+          "hash": "8060064000932376512"
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/flipkart-extractor.ts",
+          "hash": "13213171570792443108",
+          "deps": [
+            "npm:cheerio",
+            "npm:undici"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/index.ts",
+          "hash": "12222518528721208000"
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/instagram-extractor.ts",
+          "hash": "15399637059057729706",
+          "deps": [
+            "npm:cheerio",
+            "npm:undici",
+            [
+              "npm:insta-fetcher",
+              "dynamic"
+            ]
+          ]
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/oembed-extractor.ts",
+          "hash": "15681325246608621295",
+          "deps": [
+            "npm:undici"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/reddit-extractor.ts",
+          "hash": "18057315307071730327",
+          "deps": [
+            "npm:undici"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/swiggy-extractor.ts",
+          "hash": "1956267027947019046",
+          "deps": [
+            "npm:cheerio",
+            "npm:undici"
+          ]
+        },
+        {
+          "file": "apps/api/src/services/platform-extractors/zepto-extractor.ts",
+          "hash": "18069187889981469555",
+          "deps": [
+            "npm:cheerio",
+            "npm:undici"
+          ]
         },
         {
           "file": "apps/api/src/services/scraper.service.ts",
-          "hash": "2443555192216436749",
+          "hash": "15469552508536187273",
           "deps": [
             "npm:undici"
           ]
@@ -132,14 +235,23 @@
         },
         {
           "file": "apps/api/src/utils/og-parser.ts",
-          "hash": "10376199394773545135",
+          "hash": "17269910700408435501",
           "deps": [
-            "npm:cheerio"
+            "npm:cheerio",
+            "npm:domhandler"
           ]
+        },
+        {
+          "file": "apps/api/src/utils/platform-detector.ts",
+          "hash": "910822551325675545"
         },
         {
           "file": "apps/api/src/utils/url-validator.ts",
           "hash": "5850768720488688907"
+        },
+        {
+          "file": "apps/api/start.sh",
+          "hash": "16921127273031250412"
         },
         {
           "file": "apps/api/tsconfig.json",
@@ -147,6 +259,10 @@
         }
       ],
       "expo": [
+        {
+          "file": "apps/expo/.env",
+          "hash": "6768147015284059905"
+        },
         {
           "file": "apps/expo/App.tsx",
           "hash": "12998379271840299248",
@@ -166,7 +282,7 @@
         },
         {
           "file": "apps/expo/android/app/build.gradle",
-          "hash": "14518943380387495462"
+          "hash": "5641619225054712563"
         },
         {
           "file": "apps/expo/android/app/debug.keystore",
@@ -479,8 +595,12 @@
           "hash": "13909360296256145169"
         },
         {
+          "file": "apps/expo/package-lock.json",
+          "hash": "402404018254728959"
+        },
+        {
           "file": "apps/expo/package.json",
-          "hash": "11228740413622848181",
+          "hash": "17451363184408172377",
           "deps": [
             "npm:@react-native-async-storage/async-storage",
             "npm:@react-navigation/native",
@@ -518,7 +638,7 @@
         },
         {
           "file": "apps/expo/project.json",
-          "hash": "16539499799645852749"
+          "hash": "15224636386898729603"
         },
         {
           "file": "apps/expo/screens/EditLinkScreen.tsx",
@@ -557,7 +677,7 @@
         },
         {
           "file": "apps/expo/services/platformConfig.ts",
-          "hash": "5749845285555921919"
+          "hash": "17784914358897731416"
         },
         {
           "file": "apps/expo/services/storage.ts",
@@ -577,10 +697,6 @@
         {
           "file": "apps/expo/types/link.ts",
           "hash": "12551904037025711878"
-        },
-        {
-          "file": "apps/expo/package-lock.json",
-          "hash": "402404018254728959"
         }
       ]
     }

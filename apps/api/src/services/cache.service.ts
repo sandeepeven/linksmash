@@ -145,4 +145,3 @@ export async function setCachedMetadata(
 export function isCacheAvailable(): boolean {
   return redisClient !== null && redisClient.status === "ready";
 }
-

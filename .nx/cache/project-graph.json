@@ -35,10 +35,10 @@
             },
             "configurations": {}
           },
-          "build-local": {
+          "build:prod": {
             "executor": "nx:run-script",
             "options": {
-              "script": "build-local"
+              "script": "build:prod"
             },
             "configurations": {}
           },
@@ -64,8 +64,13 @@
             "configurations": {}
           },
           "build": {
-            "dependsOn": ["^build"],
-            "inputs": ["production", "^production"],
+            "dependsOn": [
+              "^build"
+            ],
+            "inputs": [
+              "production",
+              "^production"
+            ],
             "executor": "@nx/expo:build",
             "options": {},
             "configurations": {}
@@ -79,7 +84,9 @@
           },
           "lint": {
             "executor": "@nx/eslint:lint",
-            "outputs": ["{options.outputFile}"],
+            "outputs": [
+              "{options.outputFile}"
+            ],
             "options": {},
             "configurations": {}
           }
@@ -114,7 +121,9 @@
           },
           "build": {
             "executor": "@nx/js:tsc",
-            "outputs": ["{options.outputPath}"],
+            "outputs": [
+              "{options.outputPath}"
+            ],
             "options": {
               "outputPath": "dist/apps/api",
               "main": "apps/api/src/main.ts",
@@ -131,7 +140,9 @@
             "configurations": {}
           },
           "nx-release-publish": {
-            "dependsOn": ["^nx-release-publish"],
+            "dependsOn": [
+              "^nx-release-publish"
+            ],
             "executor": "@nx/js:release-publish",
             "options": {},
             "configurations": {}
@@ -146,7 +157,9 @@
           },
           "lint": {
             "executor": "@nx/eslint:lint",
-            "outputs": ["{options.outputFile}"],
+            "outputs": [
+              "{options.outputFile}"
+            ],
             "options": {},
             "configurations": {}
           }
@@ -13783,6 +13796,11 @@
     "api": [
       {
         "source": "api",
+        "target": "npm:tslib",
+        "type": "static"
+      },
+      {
+        "source": "api",
         "target": "npm:undici",
         "type": "static"
       },
@@ -13799,6 +13817,11 @@
       {
         "source": "api",
         "target": "npm:typescript",
+        "type": "static"
+      },
+      {
+        "source": "api",
+        "target": "npm:domhandler",
         "type": "static"
       }
     ],

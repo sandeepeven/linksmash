@@ -3,7 +3,7 @@
  *
  * This file orchestrates the scraper and cache services to provide
  * a unified interface for fetching link metadata.
- * Handles cache lookups, scraping, and response formatting.
+ * Handles cache lookups, platform-specific extraction, and response formatting.
  */
 
 import { scrapeMetadata } from "./scraper.service";
@@ -15,6 +15,7 @@ import {
 import { normalizeUrl } from "../utils/url-validator";
 import { MetadataResponse } from "../types/metadata.types";
 import { ParsedMetadata } from "../utils/og-parser";
+import { getExtractorForUrl } from "./platform-extractors";
 
 /**
  * Detects a tag based on hostname
@@ -81,27 +82,67 @@ function formatMetadataResponse(
 }
 
 /**
- * Fetches metadata for a URL, checking cache first and scraping if needed
+ * Fetches metadata for a URL, checking cache first and using platform-specific extractor if needed
  *
  * @param url - The URL to fetch metadata for
  * @returns Promise<MetadataResponse> - The metadata response
- * @throws Error if URL is invalid or scraping fails
+ * @throws Error if URL is invalid or extraction fails
  */
 export async function fetchMetadata(url: string): Promise<MetadataResponse> {
   const normalizedUrl = normalizeUrl(url);
 
   // Try to get from cache first
-  if (isCacheAvailable()) {
-    const cached = await getCachedMetadata(normalizedUrl);
-    if (cached) {
-      console.log(`Cache hit for URL: ${normalizedUrl}`);
-      return formatMetadataResponse(normalizedUrl, cached);
+  // if (isCacheAvailable()) {
+  //   const cached = await getCachedMetadata(normalizedUrl);
+  //   if (cached) {
+  //     console.log(`Cache hit for URL: ${normalizedUrl}`);
+  //     return formatMetadataResponse(normalizedUrl, cached);
+  //   }
+  // }
+
+  // Cache miss - use platform-specific extractor
+  console.log(`Extracting metadata for URL: ${normalizedUrl}`);
+  let parsedMetadata: ParsedMetadata;
+
+  try {
+    // Get the appropriate platform extractor
+    const extractor = getExtractorForUrl(normalizedUrl);
+    const extractorName = extractor.constructor.name;
+    console.log(`Using extractor: ${extractorName} for URL: ${normalizedUrl}`);
+
+    // Extract metadata using platform-specific extractor
+    parsedMetadata = await extractor.extract(normalizedUrl);
+    console.log(
+      `Extractor result - Title: ${
+        parsedMetadata.title
+      }, Has image: ${!!parsedMetadata.image}`
+    );
+
+    // If platform extractor didn't get meaningful data, try default scraper as fallback
+    if (
+      !parsedMetadata.title &&
+      !parsedMetadata.description &&
+      !parsedMetadata.image
+    ) {
+      console.log(
+        `Platform extractor returned empty metadata, trying default scraper`
+      );
+      parsedMetadata = await scrapeMetadata(normalizedUrl);
+    }
+  } catch (error) {
+    // If platform extractor fails, fallback to default scraper
+    console.warn(
+      `Platform extractor failed: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }, falling back to default scraper`
+    );
+    try {
+      parsedMetadata = await scrapeMetadata(normalizedUrl);
+    } catch (fallbackError) {
+      // If default scraper also fails, re-throw the original error
+      throw error;
     }
   }
-
-  // Cache miss - scrape the URL
-  console.log(`Scraping URL: ${normalizedUrl}`);
-  const parsedMetadata = await scrapeMetadata(normalizedUrl);
 
   // Store in cache
   if (isCacheAvailable()) {

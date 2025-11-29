@@ -3,6 +3,9 @@
 # dependencies
 node_modules/
 
+# Nx
+.nx/
+
 # Expo
 .expo/
 dist/
