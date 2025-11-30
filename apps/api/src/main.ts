@@ -5,6 +5,9 @@
  * Starts the server on the configured port.
  */
 
+// Load environment variables from .env file
+import "dotenv/config";
+
 import { createApp } from "./app";
 
 // Add uncaught error handlers to prevent silent failures

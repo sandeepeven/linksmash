@@ -39,38 +39,44 @@ export class SwiggyExtractor extends BaseExtractor {
       const isInstamart = url.includes("/instamart/");
       
       if (isInstamart) {
-        // Handle Instamart item URLs: /instamart/item/{id}
-        const urlMetadata = this.extractInstamartFromUrl(url);
-        if (urlMetadata.title) {
-          // Try to enhance with HTML scraping
-          try {
-            const html = await this.fetchHtml(url);
-            const $ = load(html);
-            const htmlMetadata = this.extractFromHtml($, url, true);
+        // Handle Instamart item URLs: try HTML scraping first
+        try {
+          const html = await this.fetchHtml(url);
+          const $ = load(html);
+          const htmlMetadata = this.extractFromHtml($, url, true);
 
+          // If we got meaningful data from HTML, try to enhance with URL metadata
+          if (this.isValidMetadata(htmlMetadata)) {
+            const urlMetadata = this.extractInstamartFromUrl(url);
             return {
               title: htmlMetadata.title || urlMetadata.title,
               description: htmlMetadata.description || urlMetadata.description,
               image: htmlMetadata.image || urlMetadata.image,
               url: url,
             };
-          } catch {
-            return urlMetadata;
           }
+        } catch {
+          // HTML fetching/parsing failed, continue to URL extraction fallback
         }
-      }
 
-      // For Swiggy restaurant pages, try scraping
-      try {
-        const html = await this.fetchHtml(url);
-        const $ = load(html);
-        const htmlMetadata = this.extractFromHtml($, url, false);
-
-        if (this.isValidMetadata(htmlMetadata)) {
-          return htmlMetadata;
+        // Fallback to extracting from URL structure: /instamart/item/{id}
+        const urlMetadata = this.extractInstamartFromUrl(url);
+        if (urlMetadata.title) {
+          return urlMetadata;
         }
-      } catch {
-        // Continue to fallback
+      } else {
+        // For Swiggy restaurant pages, try scraping
+        try {
+          const html = await this.fetchHtml(url);
+          const $ = load(html);
+          const htmlMetadata = this.extractFromHtml($, url, false);
+
+          if (this.isValidMetadata(htmlMetadata)) {
+            return htmlMetadata;
+          }
+        } catch {
+          // Continue to fallback
+        }
       }
 
       // Fallback to default scraper
@@ -166,7 +172,16 @@ export class SwiggyExtractor extends BaseExtractor {
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
+        "Upgrade-Insecure-Requests": "1",
       },
     });
 

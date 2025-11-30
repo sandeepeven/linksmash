@@ -35,29 +35,35 @@ export class ZeptoExtractor extends BaseExtractor {
    */
   async extract(url: string): Promise<ParsedMetadata> {
     try {
-      // Extract product name from URL structure: /pn/{product-name}/pvid/{id}
-      const urlMetadata = this.extractFromUrl(url);
-      if (urlMetadata.title) {
-        // Try to enhance with HTML scraping
-        try {
-          const html = await this.fetchHtml(url);
-          const $ = load(html);
-          const htmlMetadata = this.extractFromHtml($, url);
+      // Try HTML scraping first
+      let htmlMetadata: ParsedMetadata | null = null;
+      try {
+        const html = await this.fetchHtml(url);
+        const $ = load(html);
+        htmlMetadata = this.extractFromHtml($, url);
 
-          // Merge URL and HTML metadata, preferring HTML if available
+        // If we got meaningful data from HTML, try to enhance with URL metadata
+        if (this.isValidMetadata(htmlMetadata)) {
+          const urlMetadata = this.extractFromUrl(url);
+          // Merge HTML and URL metadata, preferring HTML if available
           return {
             title: htmlMetadata.title || urlMetadata.title,
             description: htmlMetadata.description || urlMetadata.description,
             image: htmlMetadata.image || urlMetadata.image,
             url: url,
           };
-        } catch {
-          // If HTML fetch fails, return URL metadata
-          return urlMetadata;
         }
+      } catch {
+        // HTML fetching/parsing failed, continue to URL extraction fallback
       }
 
-      // Fallback to scraping
+      // Fallback to extracting from URL structure: /pn/{product-name}/pvid/{id}
+      const urlMetadata = this.extractFromUrl(url);
+      if (urlMetadata.title) {
+        return urlMetadata;
+      }
+
+      // Final fallback to scraping
       return await scrapeMetadata(url);
     } catch (error) {
       // If custom extraction fails, fall back to default scraper
@@ -150,7 +156,16 @@ export class ZeptoExtractor extends BaseExtractor {
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
+        "Upgrade-Insecure-Requests": "1",
       },
     });
 

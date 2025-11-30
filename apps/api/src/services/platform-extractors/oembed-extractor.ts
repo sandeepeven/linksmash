@@ -19,6 +19,8 @@ interface OEmbedConfig {
   urlParam: string;
   format?: string;
   accessToken?: string;
+  appId?: string;
+  appSecret?: string;
 }
 
 /**
@@ -71,17 +73,16 @@ export class OEmbedExtractor extends BaseExtractor {
       switch (this.platform) {
         case "youtube":
           return (
-            hostname.includes("youtube.com") ||
-            hostname.includes("youtu.be")
+            hostname.includes("youtube.com") || hostname.includes("youtu.be")
           );
         case "spotify":
           return hostname.includes("spotify.com");
         case "instagram":
           return hostname.includes("instagram.com");
+        case "facebook":
+          return hostname.includes("facebook.com");
         case "twitter":
-          return (
-            hostname.includes("twitter.com") || hostname.includes("x.com")
-          );
+          return hostname.includes("twitter.com") || hostname.includes("x.com");
         default:
           return false;
       }
@@ -99,7 +100,7 @@ export class OEmbedExtractor extends BaseExtractor {
   async extract(url: string): Promise<ParsedMetadata> {
     const normalizedUrl = this.normalizeUrl(url);
     const oembedUrl = this.buildOEmbedUrl(normalizedUrl);
-
+    console.log("oembedUrl:", oembedUrl);
     try {
       const response = await fetch(oembedUrl, {
         headers: {
@@ -119,7 +120,9 @@ export class OEmbedExtractor extends BaseExtractor {
       return this.parseOEmbedResponse(data, normalizedUrl);
     } catch (error) {
       throw new Error(
-        `Failed to fetch oEmbed data for ${this.platform}: ${error instanceof Error ? error.message : "Unknown error"}`
+        `Failed to fetch oEmbed data for ${this.platform}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
     }
   }
@@ -138,8 +141,17 @@ export class OEmbedExtractor extends BaseExtractor {
       urlObj.searchParams.set("format", this.config.format);
     }
 
+    // For Facebook Graph API, prefer access token, otherwise use app_id and app_secret
     if (this.config.accessToken) {
       urlObj.searchParams.set("access_token", this.config.accessToken);
+    } else if (this.config.appId && this.config.appSecret) {
+      // For Facebook Graph API, we can use app_id and app_secret
+      // Note: This generates a client credentials token
+      urlObj.searchParams.set("app_id", this.config.appId);
+      urlObj.searchParams.set("app_secret", this.config.appSecret);
+    } else if (this.config.appId) {
+      // Some endpoints may accept just app_id
+      urlObj.searchParams.set("app_id", this.config.appId);
     }
 
     return urlObj.href;
@@ -223,21 +235,56 @@ export class OEmbedExtractorFactory {
 
   /**
    * Creates an Instagram oEmbed extractor
-   * Note: Instagram oEmbed requires Facebook Graph API access token
-   * For now, this will work for basic cases without token
+   * Note: Instagram oEmbed requires Facebook Graph API authentication
    *
    * @param accessToken - Optional Facebook Graph API access token
+   * @param appId - Optional Facebook App ID
+   * @param appSecret - Optional Facebook App Secret (requires appId)
    * @returns OEmbedExtractor - Instagram extractor instance
    */
-  static createInstagram(accessToken?: string): OEmbedExtractor {
+  static createInstagram(
+    accessToken?: string,
+    appId?: string,
+    appSecret?: string
+  ): OEmbedExtractor {
     // Instagram oEmbed via Facebook Graph API
-    // If no token provided, we'll try the public endpoint or fallback to scraping
+    const hasAuth = accessToken || (appId && appSecret);
+    console.log("hasAuth", hasAuth);
     return new OEmbedExtractor("instagram", {
-      endpoint: accessToken
+      endpoint: hasAuth
         ? `https://graph.facebook.com/v18.0/instagram_oembed`
         : "https://api.instagram.com/oembed/",
       urlParam: "url",
       accessToken: accessToken,
+      appId: appId,
+      appSecret: appSecret,
+    });
+  }
+
+  /**
+   * Creates a Facebook oEmbed extractor
+   * Note: Facebook oEmbed requires Facebook Graph API authentication
+   *
+   * @param accessToken - Optional Facebook Graph API access token
+   * @param appId - Optional Facebook App ID
+   * @param appSecret - Optional Facebook App Secret (requires appId)
+   * @returns OEmbedExtractor - Facebook extractor instance
+   */
+  static createFacebook(
+    accessToken?: string,
+    appId?: string,
+    appSecret?: string
+  ): OEmbedExtractor {
+    // Facebook oEmbed via Facebook Graph API
+    const hasAuth = accessToken || (appId && appSecret);
+    return new OEmbedExtractor("facebook", {
+      endpoint: hasAuth
+        ? `https://graph.facebook.com/v18.0/oembed_post`
+        : "https://www.facebook.com/plugins/post/oembed.json/",
+      urlParam: "url",
+      accessToken: accessToken,
+      appId: appId,
+      appSecret: appSecret,
     });
   }
 
@@ -253,4 +300,3 @@ export class OEmbedExtractorFactory {
     });
   }
 }
-

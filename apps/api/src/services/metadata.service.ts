@@ -3,10 +3,10 @@
  *
  * This file orchestrates the scraper and cache services to provide
  * a unified interface for fetching link metadata.
- * Handles cache lookups, platform-specific extraction, and response formatting.
+ * Handles cache lookups, scraping, and response formatting.
+ * Uses platform-specific extractors for optimal metadata extraction.
  */
 
-import { scrapeMetadata } from "./scraper.service";
 import {
   getCachedMetadata,
   setCachedMetadata,
@@ -82,11 +82,11 @@ function formatMetadataResponse(
 }
 
 /**
- * Fetches metadata for a URL, checking cache first and using platform-specific extractor if needed
+ * Fetches metadata for a URL, checking cache first and scraping if needed
  *
  * @param url - The URL to fetch metadata for
  * @returns Promise<MetadataResponse> - The metadata response
- * @throws Error if URL is invalid or extraction fails
+ * @throws Error if URL is invalid or scraping fails
  */
 export async function fetchMetadata(url: string): Promise<MetadataResponse> {
   const normalizedUrl = normalizeUrl(url);
@@ -101,48 +101,10 @@ export async function fetchMetadata(url: string): Promise<MetadataResponse> {
   // }
 
   // Cache miss - use platform-specific extractor
-  console.log(`Extracting metadata for URL: ${normalizedUrl}`);
-  let parsedMetadata: ParsedMetadata;
-
-  try {
-    // Get the appropriate platform extractor
-    const extractor = getExtractorForUrl(normalizedUrl);
-    const extractorName = extractor.constructor.name;
-    console.log(`Using extractor: ${extractorName} for URL: ${normalizedUrl}`);
-
-    // Extract metadata using platform-specific extractor
-    parsedMetadata = await extractor.extract(normalizedUrl);
-    console.log(
-      `Extractor result - Title: ${
-        parsedMetadata.title
-      }, Has image: ${!!parsedMetadata.image}`
-    );
-
-    // If platform extractor didn't get meaningful data, try default scraper as fallback
-    if (
-      !parsedMetadata.title &&
-      !parsedMetadata.description &&
-      !parsedMetadata.image
-    ) {
-      console.log(
-        `Platform extractor returned empty metadata, trying default scraper`
-      );
-      parsedMetadata = await scrapeMetadata(normalizedUrl);
-    }
-  } catch (error) {
-    // If platform extractor fails, fallback to default scraper
-    console.warn(
-      `Platform extractor failed: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }, falling back to default scraper`
-    );
-    try {
-      parsedMetadata = await scrapeMetadata(normalizedUrl);
-    } catch (fallbackError) {
-      // If default scraper also fails, re-throw the original error
-      throw error;
-    }
-  }
+  // This will route to the appropriate extractor (Instagram, Facebook, etc.)
+  // which handles oEmbed → HTML scraping → URL extraction → default scraper
+  const extractor = getExtractorForUrl(normalizedUrl);
+  const parsedMetadata = await extractor.extract(normalizedUrl);
 
   // Store in cache
   if (isCacheAvailable()) {

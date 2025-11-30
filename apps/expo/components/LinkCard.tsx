@@ -172,8 +172,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginHorizontal: 16,
     marginVertical: 6,
-    borderWidth: 2,
-    borderColor: "rgb(0, 255, 0)",
+    borderWidth: 0,
+    borderColor: "transparent",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -189,6 +189,8 @@ const styles = StyleSheet.create({
   },
   cardDark: {
     backgroundColor: "#000000",
+    borderWidth: 2,
+    borderColor: "rgb(0, 255, 0)",
   },
   content: {
     flex: 1,

@@ -42,6 +42,7 @@ export function detectPlatform(url: string): string | null {
     youtube: ["youtube.com", "youtu.be"],
     spotify: ["spotify.com"],
     instagram: ["instagram.com"],
+    facebook: ["facebook.com", "fb.com"],
     twitter: ["twitter.com", "x.com"],
     reddit: ["reddit.com"],
     flipkart: ["flipkart.com"],

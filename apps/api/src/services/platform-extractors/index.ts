@@ -11,6 +11,7 @@ import { BlockedExtractor } from "./blocked-extractor";
 import { RedditExtractor } from "./reddit-extractor";
 import { OEmbedExtractorFactory } from "./oembed-extractor";
 import { InstagramExtractor } from "./instagram-extractor";
+import { FacebookExtractor } from "./facebook-extractor";
 import { FlipkartExtractor } from "./flipkart-extractor";
 import { BlinkItExtractor } from "./blinkit-extractor";
 import { ZeptoExtractor } from "./zepto-extractor";
@@ -34,8 +35,11 @@ class PlatformExtractorRegistry {
     this.register("spotify", OEmbedExtractorFactory.createSpotify());
     this.register("twitter", OEmbedExtractorFactory.createTwitter());
 
-    // Initialize Instagram extractor (custom scraping, oEmbed requires auth)
+    // Initialize Instagram extractor (uses HTML scraping, then URL extraction, then default scraper)
     this.register("instagram", new InstagramExtractor());
+
+    // Initialize Facebook extractor (uses HTML scraping, then URL extraction, then default scraper)
+    this.register("facebook", new FacebookExtractor());
 
     // Initialize custom extractors
     this.register("reddit", new RedditExtractor());
@@ -68,7 +72,6 @@ class PlatformExtractorRegistry {
    */
   getExtractor(url: string): IPlatformExtractor {
     const platform = detectPlatform(url);
-
     if (!platform) {
       return this.defaultExtractor;
     }
@@ -127,8 +130,8 @@ export { BlockedExtractor } from "./blocked-extractor";
 export { RedditExtractor } from "./reddit-extractor";
 export { OEmbedExtractor, OEmbedExtractorFactory } from "./oembed-extractor";
 export { InstagramExtractor } from "./instagram-extractor";
+export { FacebookExtractor } from "./facebook-extractor";
 export { FlipkartExtractor } from "./flipkart-extractor";
 export { BlinkItExtractor } from "./blinkit-extractor";
 export { ZeptoExtractor } from "./zepto-extractor";
 export { SwiggyExtractor } from "./swiggy-extractor";
-

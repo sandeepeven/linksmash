@@ -1,8 +1,9 @@
 /**
- * Flipkart Extractor
+ * Facebook Extractor
  *
- * This file provides a metadata extractor for Flipkart product pages.
- * Parses URL parameters and scrapes product-specific metadata.
+ * This file provides a metadata extractor for Facebook posts and pages.
+ * Uses Facebook Graph API oEmbed first, then falls back to HTML scraping,
+ * then URL extraction.
  */
 
 import { BaseExtractor } from "./base-extractor";
@@ -14,23 +15,26 @@ import { isPlatform } from "../../utils/platform-detector";
 import { resolveUrl } from "../../utils/url-validator";
 
 /**
- * Flipkart product metadata extractor
+ * Facebook metadata extractor that scrapes Open Graph tags
+ * Uses HTML scraping first, then URL extraction, then default scraper
  */
-export class FlipkartExtractor extends BaseExtractor {
+export class FacebookExtractor extends BaseExtractor {
+
   /**
    * Checks if this extractor can handle the given URL
    *
    * @param url - The URL to check
-   * @returns boolean - True if URL is a Flipkart URL
+   * @returns boolean - True if URL is a Facebook URL
    */
   canHandle(url: string): boolean {
-    return isPlatform(url, "flipkart");
+    return isPlatform(url, "facebook");
   }
 
   /**
-   * Extracts metadata from Flipkart product page
+   * Extracts metadata from Facebook post/page
+   * Tries HTML scraping first, then URL extraction, then default scraper
    *
-   * @param url - The Flipkart URL to extract metadata from
+   * @param url - The Facebook URL to extract metadata from
    * @returns Promise<ParsedMetadata> - Extracted metadata
    */
   async extract(url: string): Promise<ParsedMetadata> {
@@ -40,7 +44,7 @@ export class FlipkartExtractor extends BaseExtractor {
         const html = await this.fetchHtml(url);
         const $ = load(html);
 
-        // Try to extract product information from common Flipkart selectors
+        // Extract Open Graph metadata
         const metadata = this.extractFromHtml($, url);
 
         // If we got meaningful data, return it
@@ -51,36 +55,88 @@ export class FlipkartExtractor extends BaseExtractor {
         // HTML fetching/parsing failed, continue to URL extraction fallback
       }
 
-      // Fallback to extracting from URL parameters
+      // Fallback to extracting from URL structure
       const urlMetadata = this.extractFromUrl(url);
       if (urlMetadata.title) {
         return urlMetadata;
       }
 
-      // Final fallback: use default scraper
+      // Final fallback to default scraper
       return await scrapeMetadata(url);
     } catch (error) {
-      // If custom extraction fails, fall back to default scraper
+      // If all extraction methods fail, fall back to default scraper
       return await scrapeMetadata(url);
     }
   }
 
   /**
-   * Extracts metadata from Flipkart URL parameters
+   * Extracts metadata from Facebook HTML content
+   * Facebook includes Open Graph tags in the page
    *
-   * @param url - The Flipkart URL
+   * @param $ - Cheerio instance
+   * @param url - Original URL
+   * @returns ParsedMetadata - Extracted metadata
+   */
+  private extractFromHtml($: CheerioAPI, url: string): ParsedMetadata {
+    const title =
+      $('meta[property="og:title"]').attr("content") ||
+      $("title").first().text().trim() ||
+      null;
+
+    const description =
+      $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="description"]').attr("content") ||
+      null;
+
+    let image: string | null = null;
+    const ogImage = $('meta[property="og:image"]').attr("content");
+    if (ogImage) {
+      image = resolveUrl(ogImage, url);
+    }
+
+    return {
+      title: title,
+      description: description,
+      image: image,
+      url: url,
+    };
+  }
+
+  /**
+   * Extracts metadata from Facebook URL structure
+   * Facebook URLs are like: /username/posts/{id}/ or /pages/{id}/
+   *
+   * @param url - The Facebook URL
    * @returns ParsedMetadata - Extracted metadata
    */
   private extractFromUrl(url: string): ParsedMetadata {
     try {
       const urlObj = new URL(url);
-      const textParam = urlObj.searchParams.get("text");
+      const pathParts = urlObj.pathname.split("/").filter((p) => p);
 
-      if (textParam) {
-        // Decode the text parameter which often contains product name
-        const decodedText = decodeURIComponent(textParam);
+      // Facebook URLs can be /username/posts/{id}/, /pages/{id}/, /groups/{id}/
+      if (pathParts.length > 0) {
+        const firstPart = pathParts[0];
+        let title: string | null = null;
+
+        if (firstPart === "pages" && pathParts.length > 1) {
+          title = "Facebook Page";
+        } else if (firstPart === "groups" && pathParts.length > 1) {
+          title = "Facebook Group";
+        } else if (firstPart === "events" && pathParts.length > 1) {
+          title = "Facebook Event";
+        } else if (pathParts.length >= 2 && pathParts[1] === "posts") {
+          title = "Facebook Post";
+        } else if (pathParts.length > 0) {
+          // Try to extract username or page name
+          const name = pathParts[0].replace(/-/g, " ");
+          title = name.charAt(0).toUpperCase() + name.slice(1);
+        } else {
+          title = "Facebook Content";
+        }
+
         return {
-          title: decodedText || null,
+          title: title,
           description: null,
           image: null,
           url: url,
@@ -94,49 +150,8 @@ export class FlipkartExtractor extends BaseExtractor {
   }
 
   /**
-   * Extracts metadata from HTML content
-   *
-   * @param $ - Cheerio instance
-   * @param url - Original URL
-   * @returns ParsedMetadata - Extracted metadata
-   */
-  private extractFromHtml($: CheerioAPI, url: string): ParsedMetadata {
-    // Try common Flipkart meta tags and selectors
-    const title =
-      $('meta[property="og:title"]').attr("content") ||
-      $('h1[class*="product"]').first().text().trim() ||
-      $("h1").first().text().trim() ||
-      null;
-
-    const description =
-      $('meta[property="og:description"]').attr("content") ||
-      $('meta[name="description"]').attr("content") ||
-      null;
-
-    let image: string | null = null;
-    const ogImage = $('meta[property="og:image"]').attr("content");
-    if (ogImage) {
-      image = resolveUrl(ogImage, url);
-    } else {
-      // Try to find product image
-      const productImage = $('img[class*="product"], img[alt*="product"]')
-        .first()
-        .attr("src");
-      if (productImage) {
-        image = resolveUrl(productImage, url);
-      }
-    }
-
-    return {
-      title: title,
-      description: description,
-      image: image,
-      url: url,
-    };
-  }
-
-  /**
-   * Fetches HTML content from URL
+   * Fetches HTML content from Facebook URL
+   * Uses appropriate headers to mimic a browser request
    *
    * @param url - The URL to fetch
    * @returns Promise<string> - HTML content
@@ -156,6 +171,7 @@ export class FlipkartExtractor extends BaseExtractor {
         "Sec-Fetch-Dest": "document",
         "Upgrade-Insecure-Requests": "1",
       },
+      redirect: "follow",
     });
 
     if (!response.ok) {
@@ -165,3 +181,4 @@ export class FlipkartExtractor extends BaseExtractor {
     return await response.text();
   }
 }
+

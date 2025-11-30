@@ -2,7 +2,8 @@
  * Instagram Extractor
  *
  * This file provides a metadata extractor for Instagram posts and reels.
- * Uses insta-fetcher package for better metadata extraction with fallback to manual scraping.
+ * Instagram's oEmbed API requires Facebook Graph API authentication, so this
+ * extractor scrapes the page directly to extract Open Graph metadata.
  */
 
 import { BaseExtractor } from "./base-extractor";
@@ -13,51 +14,11 @@ import { fetch } from "undici";
 import { isPlatform } from "../../utils/platform-detector";
 import { resolveUrl } from "../../utils/url-validator";
 
-// Try to import insta-fetcher, but handle gracefully if not available
-let igApi: any = null;
-let instaFetcherAvailable = false;
-
-try {
-  const instaFetcher = require("insta-fetcher");
-  igApi = instaFetcher.igApi;
-  instaFetcherAvailable = true;
-  console.log("insta-fetcher package is available");
-} catch (error) {
-  console.warn(
-    "insta-fetcher package not available, using fallback scraping method"
-  );
-}
-
 /**
- * Instagram metadata extractor using insta-fetcher package
+ * Instagram metadata extractor that scrapes Open Graph tags
+ * Uses HTML scraping first, then URL extraction, then default scraper
  */
 export class InstagramExtractor extends BaseExtractor {
-  private ig: any = null;
-
-  constructor() {
-    super();
-    // Initialize insta-fetcher if available and cookie is provided
-    if (instaFetcherAvailable && igApi) {
-      const instagramCookie = process.env.INSTAGRAM_SESSION_COOKIE;
-      if (instagramCookie) {
-        try {
-          this.ig = new igApi(instagramCookie);
-          console.log("Instagram extractor initialized with insta-fetcher");
-        } catch (error) {
-          console.warn(
-            `Failed to initialize insta-fetcher: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          );
-        }
-      } else {
-        console.warn(
-          "INSTAGRAM_SESSION_COOKIE not set, insta-fetcher will use default behavior"
-        );
-      }
-    }
-  }
-
   /**
    * Checks if this extractor can handle the given URL
    *
@@ -70,131 +31,40 @@ export class InstagramExtractor extends BaseExtractor {
 
   /**
    * Extracts metadata from Instagram post/reel page
-   * Tries insta-fetcher first, falls back to manual scraping if needed
+   * Tries HTML scraping first, then URL extraction, then default scraper
    *
    * @param url - The Instagram URL to extract metadata from
    * @returns Promise<ParsedMetadata> - Extracted metadata
    */
   async extract(url: string): Promise<ParsedMetadata> {
-    // Try insta-fetcher first if available
-    if (instaFetcherAvailable && igApi) {
+    try {
+      // Try HTML scraping first
       try {
-        const metadata = await this.extractWithInstaFetcher(url);
+        const html = await this.fetchHtml(url);
+        const $ = load(html);
+
+        // Extract Open Graph metadata
+        const metadata = this.extractFromHtml($, url);
+        // If we got meaningful data, return it
         if (this.isValidMetadata(metadata)) {
-          console.log(
-            `Instagram extractor (insta-fetcher) - Title: ${
-              metadata.title
-            }, Image: ${metadata.image ? "present" : "missing"}`
-          );
           return metadata;
         }
-      } catch (error) {
-        console.warn(
-          `insta-fetcher extraction failed: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }, trying fallback method`
-        );
+      } catch {
+        // HTML fetching/parsing failed, continue to URL extraction fallback
       }
-    }
 
-    // Fallback to manual scraping method
-    try {
-      const metadata = await this.extractWithManualScraping(url);
-      if (this.isValidMetadata(metadata)) {
-        console.log(
-          `Instagram extractor (manual) - Title: ${metadata.title}, Image: ${
-            metadata.image ? "present" : "missing"
-          }`
-        );
-        return metadata;
+      // Fallback to extracting from URL structure
+      const urlMetadata = this.extractFromUrl(url);
+      if (urlMetadata.title) {
+        return urlMetadata;
       }
+
+      // Final fallback to default scraper
+      return await scrapeMetadata(url);
     } catch (error) {
-      console.warn(
-        `Manual Instagram extraction failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      // If all extraction methods fail, fall back to default scraper
+      return await scrapeMetadata(url);
     }
-
-    // Final fallback to default scraper
-    console.warn(
-      "All Instagram extraction methods failed, falling back to default scraper"
-    );
-    return await scrapeMetadata(url);
-  }
-
-  /**
-   * Extracts metadata using insta-fetcher package
-   *
-   * @param url - The Instagram URL
-   * @returns Promise<ParsedMetadata> - Extracted metadata
-   */
-  private async extractWithInstaFetcher(url: string): Promise<ParsedMetadata> {
-    // Initialize igApi instance if not already initialized
-    let igInstance = this.ig;
-    if (!igInstance && igApi) {
-      // Try with cookie from env first, or without cookie for public posts
-      const cookie = process.env.INSTAGRAM_SESSION_COOKIE;
-      try {
-        if (cookie) {
-          igInstance = new igApi(cookie);
-        } else {
-          // Try without cookie (may work for public posts)
-          igInstance = new igApi();
-        }
-      } catch (error) {
-        throw new Error(
-          `Failed to initialize insta-fetcher: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
-      }
-    }
-
-    if (!igInstance) {
-      throw new Error("insta-fetcher not properly initialized");
-    }
-
-    // Fetch post data using insta-fetcher
-    const postData: any = await igInstance.fetchPost(url);
-
-    // Extract metadata from post data
-    // insta-fetcher returns IPostModels which may have different structures
-    const caption =
-      postData?.caption || postData?.text || postData?.description || null;
-    const images = postData?.images || postData?.image_urls || [];
-    const imageUrl =
-      images?.[0] ||
-      postData?.image ||
-      postData?.thumbnail ||
-      postData?.display_url ||
-      null;
-
-    const metadata: ParsedMetadata = {
-      title: caption,
-      description: caption,
-      image: imageUrl,
-      url: url,
-    };
-
-    return metadata;
-  }
-
-  /**
-   * Extracts metadata using manual scraping (fallback method)
-   *
-   * @param url - The Instagram URL
-   * @returns Promise<ParsedMetadata> - Extracted metadata
-   */
-  private async extractWithManualScraping(
-    url: string
-  ): Promise<ParsedMetadata> {
-    // Fetch the Instagram page
-    const html = await this.fetchHtml(url);
-    const $ = load(html);
-
-    // Extract Open Graph metadata
-    return this.extractFromHtml($, url);
   }
 
   /**
@@ -210,12 +80,8 @@ export class InstagramExtractor extends BaseExtractor {
     let title =
       $('meta[property="og:title"]').attr("content") ||
       $('meta[name="og:title"]').attr("content") ||
+      $('meta[name="twitter:title"]').attr("content") ||
       null;
-
-    // Log raw title for debugging
-    if (title) {
-      console.log(`Instagram raw title: ${title.substring(0, 100)}`);
-    }
 
     // Decode HTML entities
     if (title) {
@@ -248,16 +114,18 @@ export class InstagramExtractor extends BaseExtractor {
       if (title.toLowerCase() === "instagram" || title.length === 0) {
         title = null;
       }
-
-      console.log(
-        `Instagram cleaned title: ${title ? title.substring(0, 100) : "null"}`
-      );
+    } else {
+      const captionEl = $("h1, h2, span")
+        .filter((i, el) => $(el).text().length > 30)
+        .first();
+      title = captionEl.text().trim() || $("title").text().trim();
     }
 
     // Extract Open Graph description and decode HTML entities
     let description =
       $('meta[property="og:description"]').attr("content") ||
       $('meta[name="og:description"]').attr("content") ||
+      $('meta[name="twitter:description"]').attr("content") ||
       null;
 
     // Clean up Instagram description format
@@ -287,11 +155,22 @@ export class InstagramExtractor extends BaseExtractor {
             .trim();
         }
       }
+    } else {
+      const blocks = $("span, div")
+        .map((i, el) => $(el).text().trim())
+        .get()
+        .filter((txt) => txt.length > 50)
+        .sort((a, b) => b.length - a.length);
+
+      description = blocks[0] || null;
     }
 
     // Extract Open Graph image
     let image: string | null = null;
-    const ogImage = $('meta[property="og:image"]').attr("content");
+    const ogImage =
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
+      null;
     if (ogImage) {
       // Decode HTML entities in image URL
       const decodedImageUrl = this.decodeHtmlEntities(ogImage);
@@ -355,10 +234,13 @@ export class InstagramExtractor extends BaseExtractor {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
-        Connection: "keep-alive",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
         "Upgrade-Insecure-Requests": "1",
       },
       redirect: "follow",
@@ -369,5 +251,47 @@ export class InstagramExtractor extends BaseExtractor {
     }
 
     return await response.text();
+  }
+
+  /**
+   * Extracts metadata from Instagram URL structure
+   * Instagram URLs are like: /p/{postid}/ or /reel/{reelid}/
+   *
+   * @param url - The Instagram URL
+   * @returns ParsedMetadata - Extracted metadata
+   */
+  private extractFromUrl(url: string): ParsedMetadata {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split("/").filter((p) => p);
+
+      // Instagram URLs can be /p/{id}/, /reel/{id}/, /tv/{id}/
+      if (pathParts.length >= 2) {
+        const type = pathParts[0]; // 'p', 'reel', 'tv'
+        const id = pathParts[1];
+
+        let title: string | null = null;
+        if (type === "p") {
+          title = "Instagram Post";
+        } else if (type === "reel") {
+          title = "Instagram Reel";
+        } else if (type === "tv") {
+          title = "Instagram TV";
+        } else {
+          title = "Instagram Content";
+        }
+
+        return {
+          title: title,
+          description: null,
+          image: null,
+          url: url,
+        };
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+
+    return this.createDefaultMetadata(url);
   }
 }

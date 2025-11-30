@@ -10,6 +10,8 @@ import { BaseExtractor } from "./base-extractor";
 import { ParsedMetadata } from "../../utils/og-parser";
 import { resolveUrl } from "../../utils/url-validator";
 import { isPlatform } from "../../utils/platform-detector";
+import { scrapeMetadata } from "../scraper.service";
+import { load, CheerioAPI } from "cheerio";
 
 /**
  * Reddit JSON API response structure
@@ -57,51 +59,68 @@ export class RedditExtractor extends BaseExtractor {
   }
 
   /**
-   * Extracts metadata from Reddit using JSON API
+   * Extracts metadata from Reddit post/page
    *
    * @param url - The Reddit URL to extract metadata from
    * @returns Promise<ParsedMetadata> - Extracted metadata
    */
   async extract(url: string): Promise<ParsedMetadata> {
-    // Remove trailing slash and append .json
-    const jsonUrl = url.replace(/\/$/, "") + ".json";
-
     try {
-      const response = await fetch(jsonUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      });
+      // Try HTML scraping first
+      try {
+        const html = await this.fetchHtml(url);
+        const $ = load(html);
 
-      if (!response.ok) {
-        throw new Error(
-          `Reddit API returned status ${response.status}: ${response.statusText}`
-        );
+        // Extract Open Graph metadata from HTML
+        const metadata = this.extractFromHtml($, url);
+
+        // If we got meaningful data, return it
+        if (this.isValidMetadata(metadata)) {
+          return metadata;
+        }
+      } catch {
+        // HTML fetching/parsing failed, continue to JSON API fallback
       }
 
-      const data = (await response.json()) as RedditListing[];
-      if (!data || !Array.isArray(data) || data.length === 0) {
-        throw new Error("Invalid Reddit JSON response");
+      // Fallback to Reddit JSON API
+      try {
+        // Remove trailing slash and append .json
+        const jsonUrl = url.replace(/\/$/, "") + ".json";
+
+        const response = await fetch(jsonUrl, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          },
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as RedditListing[];
+          if (
+            data &&
+            Array.isArray(data) &&
+            data.length > 0 &&
+            data[0]?.data?.children?.length > 0
+          ) {
+            const post = data[0].data.children[0].data;
+            return this.parseRedditPost(post, url);
+          }
+        }
+      } catch {
+        // JSON API failed, continue to URL extraction fallback
       }
 
-      // Reddit returns array with listing data
-      const listing = data[0];
-      if (
-        !listing ||
-        !listing.data ||
-        !listing.data.children ||
-        listing.data.children.length === 0
-      ) {
-        throw new Error("No post data found in Reddit response");
+      // Fallback to extracting from URL structure
+      const urlMetadata = this.extractFromUrl(url);
+      if (urlMetadata.title) {
+        return urlMetadata;
       }
 
-      const post = listing.data.children[0].data;
-      return this.parseRedditPost(post, url);
+      // Final fallback to default scraper
+      return await scrapeMetadata(url);
     } catch (error) {
-      throw new Error(
-        `Failed to fetch Reddit metadata: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
+      // If all extraction methods fail, fall back to default scraper
+      return await scrapeMetadata(url);
     }
   }
 
@@ -150,6 +169,109 @@ export class RedditExtractor extends BaseExtractor {
       image: image,
       url: originalUrl,
     };
+  }
+
+  /**
+   * Extracts metadata from Reddit HTML content
+   *
+   * @param $ - Cheerio instance
+   * @param url - Original URL
+   * @returns ParsedMetadata - Extracted metadata
+   */
+  private extractFromHtml($: CheerioAPI, url: string): ParsedMetadata {
+    const title =
+      $('meta[property="og:title"]').attr("content") ||
+      $('h1[class*="title"]').first().text().trim() ||
+      $("h1").first().text().trim() ||
+      null;
+
+    const description =
+      $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="description"]').attr("content") ||
+      null;
+
+    let image: string | null = null;
+    const ogImage = $('meta[property="og:image"]').attr("content");
+    if (ogImage) {
+      image = resolveUrl(ogImage, url);
+    }
+
+    return {
+      title: title,
+      description: description,
+      image: image,
+      url: url,
+    };
+  }
+
+  /**
+   * Extracts metadata from Reddit URL structure
+   * Reddit URLs are like: /r/subreddit/comments/postid/title/
+   *
+   * @param url - The Reddit URL
+   * @returns ParsedMetadata - Extracted metadata
+   */
+  private extractFromUrl(url: string): ParsedMetadata {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split("/").filter((p) => p);
+
+      // Look for subreddit in path: /r/{subreddit}/...
+      const rIndex = pathParts.indexOf("r");
+      if (rIndex !== -1 && pathParts[rIndex + 1]) {
+        const subreddit = pathParts[rIndex + 1];
+        // Try to extract title from URL path if available
+        const title = pathParts.length > rIndex + 3
+          ? pathParts
+              .slice(rIndex + 3)
+              .join(" ")
+              .replace(/-/g, " ")
+              .replace(/\b\w/g, (l) => l.toUpperCase())
+          : null;
+
+        return {
+          title: title || `r/${subreddit}`,
+          description: `Post from r/${subreddit}`,
+          image: null,
+          url: url,
+        };
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+
+    return this.createDefaultMetadata(url);
+  }
+
+  /**
+   * Fetches HTML content from Reddit URL
+   *
+   * @param url - The URL to fetch
+   * @returns Promise<string> - HTML content
+   */
+  private async fetchHtml(url: string): Promise<string> {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
+        "Upgrade-Insecure-Requests": "1",
+      },
+      redirect: "follow",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.text();
   }
 }
 

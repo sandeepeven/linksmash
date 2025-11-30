@@ -363,8 +363,8 @@ function extractImage($: CheerioAPI, baseUrl: string): string | null {
 }
 
 /**
- * Parses Open Graph tags from HTML content with intelligent fallback strategies
- * Uses hierarchical extraction for title, description, and image when Open Graph tags are missing
+ * Parses Open Graph tags from HTML content using simple standard approach
+ * Extracts metadata from Open Graph and Twitter Card meta tags
  *
  * @param html - The HTML content to parse
  * @param baseUrl - The base URL for resolving relative image URLs
@@ -376,10 +376,30 @@ export function parseOpenGraphTags(
 ): ParsedMetadata {
   const $ = load(html);
 
-  // Extract metadata using intelligent helper functions
-  const title = extractTitle($);
-  const description = extractDescription($);
-  const image = extractImage($, baseUrl);
+  // Simple extraction: og:title → twitter:title → <title>
+  const title =
+    $('meta[property="og:title"]').attr("content") ||
+    $('meta[name="twitter:title"]').attr("content") ||
+    $("title").text() ||
+    null;
+
+  // Simple extraction: og:description → twitter:description → meta description
+  const description =
+    $('meta[property="og:description"]').attr("content") ||
+    $('meta[name="twitter:description"]').attr("content") ||
+    $('meta[name="description"]').attr("content") ||
+    null;
+
+  // Simple extraction: og:image → twitter:image
+  let image =
+    $('meta[property="og:image"]').attr("content") ||
+    $('meta[name="twitter:image"]').attr("content") ||
+    null;
+
+  // Resolve relative image URLs to absolute URLs
+  if (image) {
+    image = resolveUrl(image, baseUrl);
+  }
 
   // Extract Open Graph URL
   const ogUrl =
