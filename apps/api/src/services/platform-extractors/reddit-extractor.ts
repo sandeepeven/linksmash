@@ -179,21 +179,51 @@ export class RedditExtractor extends BaseExtractor {
    * @returns ParsedMetadata - Extracted metadata
    */
   private extractFromHtml($: CheerioAPI, url: string): ParsedMetadata {
-    const title =
+    // Extract title from Open Graph, Twitter Card, or page title
+    let title =
       $('meta[property="og:title"]').attr("content") ||
-      $('h1[class*="title"]').first().text().trim() ||
-      $("h1").first().text().trim() ||
+      $('meta[name="twitter:title"]').attr("content") ||
+      $("title").text().trim() ||
       null;
 
+    // Clean up Reddit default title if it's just the generic one
+    if (title && title === "Reddit - The heart of the internet") {
+      // Try to find a more specific title from h1 or other elements
+      const h1Title = $("h1").first().text().trim();
+      if (h1Title && h1Title.length > 0) {
+        title = h1Title;
+      } else {
+        // Try to extract from URL if we have a post URL
+        const urlMetadata = this.extractFromUrl(url);
+        if (urlMetadata.title && urlMetadata.title !== "Reddit Content") {
+          title = urlMetadata.title;
+        }
+      }
+    }
+
+    // Extract description from Open Graph, Twitter Card, or meta description
     const description =
       $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="twitter:description"]').attr("content") ||
       $('meta[name="description"]').attr("content") ||
       null;
 
+    // Extract image from Open Graph, Twitter Card, or other sources
     let image: string | null = null;
-    const ogImage = $('meta[property="og:image"]').attr("content");
+    const ogImage =
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
+      $('meta[name="twitter:image:src"]').attr("content") ||
+      null;
+
     if (ogImage) {
       image = resolveUrl(ogImage, url);
+    } else {
+      // Fallback: try to find image in content
+      const img = $('img[src*="reddit"]').first().attr("src");
+      if (img) {
+        image = resolveUrl(img, url);
+      }
     }
 
     return {
@@ -221,13 +251,14 @@ export class RedditExtractor extends BaseExtractor {
       if (rIndex !== -1 && pathParts[rIndex + 1]) {
         const subreddit = pathParts[rIndex + 1];
         // Try to extract title from URL path if available
-        const title = pathParts.length > rIndex + 3
-          ? pathParts
-              .slice(rIndex + 3)
-              .join(" ")
-              .replace(/-/g, " ")
-              .replace(/\b\w/g, (l) => l.toUpperCase())
-          : null;
+        const title =
+          pathParts.length > rIndex + 3
+            ? pathParts
+                .slice(rIndex + 3)
+                .join(" ")
+                .replace(/-/g, " ")
+                .replace(/\b\w/g, (l) => l.toUpperCase())
+            : null;
 
         return {
           title: title || `r/${subreddit}`,
@@ -274,4 +305,3 @@ export class RedditExtractor extends BaseExtractor {
     return await response.text();
   }
 }
-

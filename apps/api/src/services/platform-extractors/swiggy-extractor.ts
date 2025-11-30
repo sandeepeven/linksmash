@@ -37,7 +37,7 @@ export class SwiggyExtractor extends BaseExtractor {
   async extract(url: string): Promise<ParsedMetadata> {
     try {
       const isInstamart = url.includes("/instamart/");
-      
+
       if (isInstamart) {
         // Handle Instamart item URLs: try HTML scraping first
         try {
@@ -173,15 +173,6 @@ export class SwiggyExtractor extends BaseExtractor {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Dest": "document",
-        "Upgrade-Insecure-Requests": "1",
       },
     });
 
@@ -192,4 +183,3 @@ export class SwiggyExtractor extends BaseExtractor {
     return await response.text();
   }
 }
-

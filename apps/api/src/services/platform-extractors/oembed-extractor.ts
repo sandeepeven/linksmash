@@ -100,7 +100,6 @@ export class OEmbedExtractor extends BaseExtractor {
   async extract(url: string): Promise<ParsedMetadata> {
     const normalizedUrl = this.normalizeUrl(url);
     const oembedUrl = this.buildOEmbedUrl(normalizedUrl);
-    console.log("oembedUrl:", oembedUrl);
     try {
       const response = await fetch(oembedUrl, {
         headers: {
