@@ -31,17 +31,20 @@ LinkSmash is built as a monorepo using [Nx](https://nx.dev/) with two main appli
 ## Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd LinkSmash
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Install dependencies for each app:
+
 ```bash
 cd apps/api && npm install && cd ../..
 cd apps/expo && npm install && cd ../..
@@ -54,11 +57,13 @@ cd apps/expo && npm install && cd ../..
 The Expo app requires an API URL to fetch metadata. Set up your environment:
 
 1. Navigate to the Expo app directory:
+
 ```bash
 cd apps/expo
 ```
 
 2. Run the setup script (recommended):
+
 ```bash
 npm run setup:env
 ```
@@ -66,11 +71,13 @@ npm run setup:env
 This interactive script will help you configure the API URL for development or production.
 
 3. Or manually create a `.env` file:
+
 ```bash
 touch .env
 ```
 
 Add the following (replace with your actual API URL):
+
 ```env
 EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080
 ```
@@ -87,6 +94,7 @@ touch .env
 ```
 
 Add the following variables (optional - defaults are provided):
+
 ```env
 PORT=8080
 REDIS_URL=redis://localhost:6379
@@ -101,6 +109,7 @@ NODE_ENV=development
 #### Start Both Apps (Recommended)
 
 Start both the API and Expo app simultaneously:
+
 ```bash
 npm run start:all
 ```
@@ -108,6 +117,7 @@ npm run start:all
 #### Start Individual Apps
 
 **Start API server only:**
+
 ```bash
 npm run start:api
 # or
@@ -117,6 +127,7 @@ cd apps/api && npm run dev
 The API will be available at `http://localhost:8080`
 
 **Start Expo app only:**
+
 ```bash
 npm run start:expo
 # or
@@ -126,16 +137,19 @@ cd apps/expo && npm start
 ### Running on Devices
 
 **Android:**
+
 ```bash
 npm run android
 ```
 
 **iOS:**
+
 ```bash
 npm run ios
 ```
 
 **Web:**
+
 ```bash
 npm run web
 ```
@@ -143,21 +157,27 @@ npm run web
 ## API Endpoints
 
 ### Health Check
+
 ```
 GET /health
 ```
+
 Returns server status and timestamp.
 
 ### Get Metadata
+
 ```
 GET /api/metadata?url=<URL>
 ```
+
 Fetches metadata for a given URL.
 
 **Query Parameters:**
+
 - `url` (required): The URL to fetch metadata for
 
 **Response:**
+
 ```json
 {
   "title": "Page Title",
@@ -195,6 +215,7 @@ LinkSmash/
 ## Building
 
 ### Build API
+
 ```bash
 npm run build:api
 ```
@@ -202,16 +223,19 @@ npm run build:api
 ### Build Expo App
 
 **Production build (Android):**
+
 ```bash
 npm run build-local
 ```
 
 **Preview build:**
+
 ```bash
 npm run build-local:preview
 ```
 
 **Development build:**
+
 ```bash
 npm run build-local:dev
 ```
@@ -240,6 +264,7 @@ npm run build-local:dev
 ## Technologies
 
 ### Frontend
+
 - **React Native** - Mobile framework
 - **Expo** - Development platform
 - **TypeScript** - Type safety
@@ -247,6 +272,7 @@ npm run build-local:dev
 - **AsyncStorage** - Local storage
 
 ### Backend
+
 - **Fastify** - Web framework
 - **TypeScript** - Type safety
 - **Cheerio** - HTML parsing
@@ -254,6 +280,7 @@ npm run build-local:dev
 - **Zod** - Schema validation
 
 ### Infrastructure
+
 - **Nx** - Monorepo tooling
 - **AWS App Runner** - Deployment (see `DEPLOYMENT.md`)
 
@@ -275,9 +302,11 @@ npm run build-local:dev
 ### Platform-Specific Issues
 
 **iOS:**
+
 - Run `cd apps/expo/ios && pod install` if CocoaPods dependencies are missing
 
 **Android:**
+
 - Ensure Android SDK is properly configured
 - Check that `ANDROID_HOME` environment variable is set
 
@@ -290,5 +319,4 @@ npm run build-local:dev
 
 ## License
 
-[Add your license here]
-
+MIT
