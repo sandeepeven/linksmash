@@ -38,6 +38,8 @@ import { saveLink, getLinks, deleteLink } from "./services/storage";
 import { LinkCard } from "./components/LinkCard";
 import { SafeAreaWrapper } from "./components/SafeAreaWrapper";
 import { EditLinkScreen } from "./screens/EditLinkScreen";
+import { extractUrlFromText } from "./services/linkParser";
+import { processLink, processLinkWithoutAPI } from "./services/linkProcessor";
 
 /**
  * Navigation param types
@@ -123,18 +125,6 @@ export default function App() {
   }, []);
 
   /**
-   * Extracts a URL from text that might contain both description and URL
-   * Uses the linkParser service for consistency
-   *
-   * @param text - The text that might contain a URL
-   * @returns string | null - The extracted URL or null if no URL found
-   */
-  const extractUrlFromText = (text: string): string | null => {
-    const { extractUrlFromText: extractUrl } = require("./services/linkParser");
-    return extractUrl(text);
-  };
-
-  /**
    * Handles processing a shared URL
    * Uses the new link processor service with platform-based parsing strategy
    *
@@ -163,20 +153,11 @@ export default function App() {
       setProcessingShare(true);
       setError(null);
 
-      const {
-        processLink,
-        processLinkWithoutAPI,
-      } = require("./services/linkProcessor");
-
       let linkData: LinkData;
 
       // Use link processor with backend API support
-      // API key parameter is optional and kept for backward compatibility
-      linkData = await processLink(
-        input,
-        undefined, // No API key needed - backend handles it
-        normalizedImages
-      );
+      // Always fetches metadata from the backend API
+      linkData = await processLink(input, normalizedImages);
 
       // Save the link to storage
       await saveLink(linkData);
@@ -194,7 +175,6 @@ export default function App() {
 
       // Even if processing fails, try to save with minimal data
       try {
-        const { processLinkWithoutAPI } = require("./services/linkProcessor");
         const linkData = processLinkWithoutAPI(input, normalizedImages);
         await saveLink(linkData);
         await loadStoredLinks();

@@ -92,13 +92,13 @@ export async function fetchMetadata(url: string): Promise<MetadataResponse> {
   const normalizedUrl = normalizeUrl(url);
 
   // Try to get from cache first
-  // if (isCacheAvailable()) {
-  //   const cached = await getCachedMetadata(normalizedUrl);
-  //   if (cached) {
-  //     console.log(`Cache hit for URL: ${normalizedUrl}`);
-  //     return formatMetadataResponse(normalizedUrl, cached);
-  //   }
-  // }
+  if (isCacheAvailable()) {
+    const cached = await getCachedMetadata(normalizedUrl);
+    if (cached) {
+      console.log(`Cache hit for URL: ${normalizedUrl}`);
+      return formatMetadataResponse(normalizedUrl, cached);
+    }
+  }
 
   // Cache miss - use platform-specific extractor
   // This will route to the appropriate extractor (Instagram, Facebook, etc.)

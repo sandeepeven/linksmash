@@ -2,14 +2,17 @@
  * Platform Configuration Service
  *
  * This file contains configuration for various platforms including
- * whether to use link preview API and default image URLs.
+ * default image URLs. The linkPreview flag is kept for reference
+ * but is no longer used - metadata is always fetched from the backend API.
  */
+
+import { extractHostname } from "./linkParser";
 
 /**
  * Platform configuration interface
  */
 export interface PlatformConfig {
-  linkPreview: boolean;
+  linkPreview: boolean; // Deprecated: kept for reference only, not used in logic
   defaultImageUrl: string | null;
   sampleUrl: string | null;
 }
@@ -141,26 +144,6 @@ export const PLATFORM_CONFIG: Record<string, PlatformConfig> = {
 };
 
 /**
- * Extracts hostname from a URL
- *
- * @param url - The URL to extract hostname from
- * @returns string | null - The hostname or null if extraction fails
- */
-export function extractHostname(url: string): string | null {
-  try {
-    const urlObj = new URL(url);
-    let hostname = urlObj.hostname.toLowerCase();
-    // Remove 'www.' prefix if present
-    if (hostname.startsWith("www.")) {
-      hostname = hostname.substring(4);
-    }
-    return hostname;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Gets platform configuration for a given URL
  *
  * @param url - The URL to get platform config for
@@ -192,8 +175,11 @@ export function getPlatformConfig(url: string): PlatformConfig {
 /**
  * Checks if a platform requires link preview API
  *
+ * @deprecated This function is no longer used. Metadata is always fetched from the backend API.
+ * Kept for backward compatibility only.
+ *
  * @param url - The URL to check
- * @returns boolean - True if link preview should be used
+ * @returns boolean - True if link preview should be used (always returns true for backward compatibility)
  */
 export function shouldUseLinkPreview(url: string): boolean {
   const config = getPlatformConfig(url);

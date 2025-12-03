@@ -1,30 +1,29 @@
 /**
  * Link Processor Service
  *
- * This file provides the main processing logic for links based on the new strategy:
+ * This file provides the main processing logic for links:
  * 1. Parse text with links to get description ready for metadata
  * 2. Parse the link to get website name and use it as metadata title
- * 3. Determine if link preview API should be called based on platform
+ * 3. Fetch metadata from the backend API
  * 4. Handle special cases for various apps
  */
 
 import { LinkData } from "../types/link";
 import { parseLink, parseBlinkItStyle, parseFlipkartStyle } from "./linkParser";
-import { shouldUseLinkPreview, getDefaultImageUrl } from "./platformConfig";
+import { getDefaultImageUrl } from "./platformConfig";
 import { detectHostnameTag } from "./hostnameTagDetection";
 import { fetchLinkMetadata } from "./metadata";
 
 /**
  * Processes a shared link or text+link combination
+ * Always fetches metadata from the backend API
  *
  * @param input - The shared text or URL
- * @param apiKey - Optional API key for link preview
  * @param attachedImages - Optional array of attached image URIs
  * @returns Promise<LinkData> - Processed link data
  */
 export async function processLink(
   input: string,
-  apiKey?: string,
   attachedImages: string[] = []
 ): Promise<LinkData> {
   // Step 1: Parse the text with links to get description ready for metadata
@@ -41,45 +40,21 @@ export async function processLink(
   let description = parsed.description;
   let image: string | null = null;
 
-  // Handle platform-specific parsing
-  if (hostname) {
-    const lowerHostname = hostname.toLowerCase();
-
-    // BlinkIt pattern
-    if (lowerHostname.includes("blinkit")) {
-      const blinkItParsed = parseBlinkItStyle(input, url);
-      title = blinkItParsed.title;
-      description = blinkItParsed.description;
-    }
-    // Flipkart pattern
-    else if (lowerHostname.includes("flipkart")) {
-      const flipkartParsed = parseFlipkartStyle(input, url);
-      title = flipkartParsed.title;
-      description = flipkartParsed.description;
-    }
-  }
-
-  // Step 3: Check if we should use link preview API
-  const useLinkPreview = shouldUseLinkPreview(url);
+  // Step 3: Get default image URL as fallback
   const defaultImageUrl = getDefaultImageUrl(url);
 
-  // Step 4: Fetch metadata from link preview API if needed
-  if (useLinkPreview && apiKey) {
-    try {
-      const apiMetadata = await fetchLinkMetadata(url, apiKey);
+  // Step 4: Always fetch metadata from backend API
+  try {
+    const apiMetadata = await fetchLinkMetadata(url);
 
-      // Merge API metadata with parsed data
-      // Prefer parsed title/description if they exist, otherwise use API data
-      title = apiMetadata.title || title || null;
-      description = apiMetadata.description || description || null;
-      image = apiMetadata.image || defaultImageUrl || null;
-    } catch (error) {
-      console.warn("Link preview API failed, using parsed data:", error);
-      // Continue with parsed data if API fails
-      image = defaultImageUrl || null;
-    }
-  } else {
-    // Use default image URL if available
+    // Merge API metadata with parsed data
+    // Prefer parsed title/description if they exist, otherwise use API data
+    title = apiMetadata.title || title || null;
+    description = apiMetadata.description || description || null;
+    image = apiMetadata.image || defaultImageUrl || null;
+  } catch (error) {
+    console.warn("Metadata API failed, using parsed data:", error);
+    // Continue with parsed data if API fails
     image = defaultImageUrl || null;
   }
 
@@ -99,15 +74,16 @@ export async function processLink(
     tag: tag,
     sharedImages: attachedImages || [],
     createdAt: new Date().toISOString(),
-    metadataFetched: useLinkPreview && apiKey ? true : false,
+    metadataFetched: true,
   };
 
   return linkData;
 }
 
 /**
- * Processes a link without API key (fallback mode)
- * Uses only parsing strategy without link preview API
+ * Processes a link without API (fallback mode)
+ * Uses only parsing strategy without metadata API
+ * Used as a fallback when API calls fail
  *
  * @param input - The shared text or URL
  * @param attachedImages - Optional array of attached image URIs

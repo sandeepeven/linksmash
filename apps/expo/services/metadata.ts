@@ -11,12 +11,38 @@ import { detectHostnameTag } from "./hostnameTagDetection";
 
 /**
  * Backend API base URL
- * In development, use 0.0.0.0 or your machine's IP address (e.g., http://192.168.1.100:3001).
- * React Native/Expo cannot use localhost as it refers to the device itself, not the development machine.
- * In production, use your deployed backend URL.
+ *
+ * In development:
+ * - Use your machine's local IP address (not localhost or 0.0.0.0)
+ * - Find your IP: On macOS/Linux run `ifconfig`, on Windows run `ipconfig`
+ * - Example: http://192.168.1.100:8080
+ * - React Native/Expo cannot use localhost as it refers to the device itself
+ *
+ * In production:
+ * - Use your deployed backend URL
+ *
+ * Set this via EXPO_PUBLIC_API_URL environment variable in a .env file
+ * or export it before running `npm start`
  */
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://0.0.0.0:3001";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://0.0.0.0:8080";
+
+// Warn if using default URL (which won't work on physical devices)
+if (!process.env.EXPO_PUBLIC_API_URL) {
+  console.warn(
+    "⚠️  EXPO_PUBLIC_API_URL not set. Using default http://0.0.0.0:8080 which may not work.\n" +
+      "   Setup options:\n" +
+      "   1. Run: npm run setup:env (in apps/expo directory)\n" +
+      "   2. Create .env file with: EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080\n" +
+      "   3. For production: EXPO_PUBLIC_API_URL=https://your-app-runner-url.awsapprunner.com"
+  );
+} else {
+  const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (apiUrl.startsWith("https://")) {
+    console.log(`✅ Using production API: ${apiUrl}`);
+  } else {
+    console.log(`✅ Using development API: ${apiUrl}`);
+  }
+}
 
 /**
  * Timeout duration for API requests in milliseconds
@@ -27,14 +53,10 @@ const API_TIMEOUT = 10000; // 10 seconds
  * Fetches metadata (title, description, image) from a URL using the backend API
  *
  * @param url - The URL to fetch metadata for
- * @param apiKey - Deprecated parameter (kept for backward compatibility, not used)
  * @returns Promise<LinkData> - Link data object with metadata
  * @throws Error if API request fails
  */
-export async function fetchLinkMetadata(
-  url: string,
-  apiKey?: string
-): Promise<LinkData> {
+export async function fetchLinkMetadata(url: string): Promise<LinkData> {
   try {
     // Validate URL format
     if (!url || typeof url !== "string") {
@@ -46,15 +68,22 @@ export async function fetchLinkMetadata(
       throw new Error("URL cannot be empty");
     }
 
-    if (!isValidUrl(trimmedUrl)) {
+    // Validate URL format
+    try {
+      const urlObj = new URL(trimmedUrl);
+      if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") {
+        throw new Error(`Invalid URL format: ${trimmedUrl}`);
+      }
+    } catch {
       throw new Error(`Invalid URL format: ${trimmedUrl}`);
     }
 
     // Construct API endpoint URL
+    console.log("API base url:", API_BASE_URL);
     const apiUrl = `${API_BASE_URL}/api/metadata?url=${encodeURIComponent(
       trimmedUrl
     )}`;
-
+    console.log("API called:", apiUrl);
     // Fetch metadata from API with timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
@@ -166,17 +195,3 @@ export async function fetchLinkMetadata(
   }
 }
 
-/**
- * Validates if a string is a valid URL
- *
- * @param urlString - The string to validate as a URL
- * @returns boolean - True if the string is a valid URL, false otherwise
- */
-function isValidUrl(urlString: string): boolean {
-  try {
-    const url = new URL(urlString);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
