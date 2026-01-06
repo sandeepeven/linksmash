@@ -275,7 +275,7 @@ npm run build-local:dev
 
 - **Fastify** - Web framework
 - **TypeScript** - Type safety
-- **Cheerio** - HTML parsing
+- **Playwright** - Browser automation and HTML parsing
 - **Redis** - Caching (optional)
 - **Zod** - Schema validation
 

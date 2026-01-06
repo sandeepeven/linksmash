@@ -20,9 +20,6 @@ try {
   // But explicit loading ensures it works when running from root via nx
 }
 
-// Get API URL from environment variable
-// Priority: process.env.EXPO_PUBLIC_API_URL (from eas.json or .env) > default
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://0.0.0.0:8080";
 
 module.exports = {
   expo: {
@@ -80,9 +77,6 @@ module.exports = {
       eas: {
         projectId: "1be44366-1c91-4617-93ed-aac555d5860e",
       },
-      // Expose API URL to the app via expo-constants
-      // This is set from environment variables (eas.json for builds, .env for local dev)
-      apiUrl: API_URL,
     },
   },
 };

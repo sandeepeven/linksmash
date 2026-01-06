@@ -13,11 +13,13 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { updateLink } from "../services/storage";
+import { fetchLinkMetadata } from "../services/metadata";
 import { LinkData } from "../types/link";
 import { SafeAreaWrapper } from "../components/SafeAreaWrapper";
 
@@ -55,6 +57,44 @@ export const EditLinkScreen: React.FC = () => {
   const [image, setImage] = useState<string>(linkData.image || "");
   const [tag, setTag] = useState<string>(linkData.tag || "");
   const [saving, setSaving] = useState<boolean>(false);
+  const [fetchingMetadata, setFetchingMetadata] = useState<boolean>(false);
+
+  /**
+   * Fetches metadata from the API and updates the link
+   */
+  const handleFetchMetadata = async () => {
+    try {
+      setFetchingMetadata(true);
+      const fetchedMetadata = await fetchLinkMetadata(linkData.url);
+
+      // Update the link in storage with fetched metadata
+      await updateLink(linkData.url, {
+        title: fetchedMetadata.title,
+        description: fetchedMetadata.description,
+        image: fetchedMetadata.image,
+        tag: fetchedMetadata.tag,
+        metadataFetched: true,
+      });
+
+      // Update local state to reflect fetched metadata
+      setTitle(fetchedMetadata.title || "");
+      setDescription(fetchedMetadata.description || "");
+      setImage(fetchedMetadata.image || "");
+      setTag(fetchedMetadata.tag || "");
+
+      Alert.alert("Success", "Metadata fetched successfully");
+    } catch (error) {
+      console.error("Error fetching metadata:", error);
+      Alert.alert(
+        "Error",
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch metadata. Please try again."
+      );
+    } finally {
+      setFetchingMetadata(false);
+    }
+  };
 
   /**
    * Saves the updated link data
@@ -199,6 +239,30 @@ export const EditLinkScreen: React.FC = () => {
             onSubmitEditing={() => tagInputRef.current?.blur()}
           />
         </View>
+
+        {/* Fetch Info Button */}
+        <View style={styles.fieldContainer}>
+          <TouchableOpacity
+            style={[
+              styles.fetchButton,
+              fetchingMetadata && styles.fetchButtonDisabled,
+            ]}
+            onPress={handleFetchMetadata}
+            disabled={fetchingMetadata}
+            activeOpacity={0.7}
+          >
+            {fetchingMetadata ? (
+              <View style={styles.fetchButtonContent}>
+                <ActivityIndicator size="small" color="#ffffff" />
+                <Text style={[styles.fetchButtonText, { marginLeft: 8 }]}>
+                  Fetching...
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.fetchButtonText}>FETCH INFO</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </KeyboardAwareScrollView>
     </SafeAreaWrapper>
   );
@@ -258,5 +322,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#0066cc",
+  },
+  fetchButton: {
+    backgroundColor: "#0066cc",
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  fetchButtonDisabled: {
+    opacity: 0.6,
+  },
+  fetchButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  fetchButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

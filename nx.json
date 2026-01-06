@@ -31,8 +31,7 @@
     }
   },
   "projects": {
-    "expo": "apps/expo",
-    "api": "apps/api"
+    "expo": "apps/expo"
   }
 }
 

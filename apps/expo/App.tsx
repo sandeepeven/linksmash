@@ -54,8 +54,8 @@ type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 /**
- * Backend API is now used instead of linkpreview.net
- * No API key required - the backend handles metadata fetching
+ * Client-side HTML parsing is used to extract metadata from URLs
+ * No backend API required - metadata is fetched and parsed directly in the app
  */
 
 export default function App() {
@@ -80,7 +80,6 @@ export default function App() {
 
   const [links, setLinks] = useState<LinkData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [processingShare, setProcessingShare] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   /**
@@ -126,7 +125,8 @@ export default function App() {
 
   /**
    * Handles processing a shared URL
-   * Uses the new link processor service with platform-based parsing strategy
+   * Saves link immediately without waiting for metadata fetch
+   * Metadata will be fetched automatically at the card level when the card renders
    *
    * @param input - The shared URL or text containing a URL to process
    * @param attachedImages - Optional array of attached image URIs
@@ -150,51 +150,22 @@ export default function App() {
     }
 
     try {
-      setProcessingShare(true);
       setError(null);
 
-      let linkData: LinkData;
-
-      // Use link processor with backend API support
-      // Always fetches metadata from the backend API
-      linkData = await processLink(input, normalizedImages);
-
-      // Save the link to storage
+      // Save link immediately without waiting for metadata
+      // Metadata will be fetched automatically when the card renders
+      const linkData = processLinkWithoutAPI(input, normalizedImages);
       await saveLink(linkData);
 
       // Reload links to update the UI
       await loadStoredLinks();
     } catch (error) {
-      console.error("Error processing shared URL:", error);
-
-      // Extract error message for user feedback
+      console.error("Error saving shared URL:", error);
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Failed to process shared link";
-
-      // Even if processing fails, try to save with minimal data
-      try {
-        const linkData = processLinkWithoutAPI(input, normalizedImages);
-        await saveLink(linkData);
-        await loadStoredLinks();
-
-        // Show warning that link was saved with limited metadata
-        if (errorMessage.includes("API") || errorMessage.includes("timeout")) {
-          setError(`Link saved but metadata unavailable: ${errorMessage}`);
-        } else {
-          setError(`Link saved with limited metadata: ${errorMessage}`);
-        }
-      } catch (saveError) {
-        console.error("Error saving link after processing failure:", saveError);
-        const saveErrorMessage =
-          saveError instanceof Error
-            ? saveError.message
-            : "Failed to save link";
-        setError(`Failed to save link: ${saveErrorMessage}`);
-      }
-    } finally {
-      setProcessingShare(false);
+          : "Failed to save shared link";
+      setError(`Failed to save link: ${errorMessage}`);
     }
   };
 
@@ -253,8 +224,6 @@ export default function App() {
     };
 
     const successHandler = async (files: any[]) => {
-      // Ensure loader is visible immediately when a share is received
-      setProcessingShare(true);
       await processSharedFiles(files);
     };
 
@@ -272,7 +241,6 @@ export default function App() {
       } else {
         console.log("No shared content available (app opened normally)");
       }
-      setProcessingShare(false);
     };
 
     ReceiveSharingIntent.getReceivedFiles(
@@ -322,7 +290,6 @@ export default function App() {
             <HomeScreen
               links={links}
               loading={loading}
-              processingShare={processingShare}
               error={error}
               setError={setError}
               loadStoredLinks={loadStoredLinks}
@@ -349,7 +316,6 @@ export default function App() {
 interface HomeScreenProps {
   links: LinkData[];
   loading: boolean;
-  processingShare: boolean;
   error: string | null;
   setError: (error: string | null) => void;
   loadStoredLinks: () => Promise<void>;
@@ -360,7 +326,6 @@ interface HomeScreenProps {
 const HomeScreen: React.FC<HomeScreenProps> = ({
   links,
   loading,
-  processingShare,
   error,
   setError,
   loadStoredLinks,
@@ -507,13 +472,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           </>
         )}
 
-        {processingShare && (
-          <View style={styles.processingOverlay}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={styles.processingText}>Processing shared link...</Text>
-          </View>
-        )}
-
         {error && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
@@ -611,24 +569,6 @@ function createStyles(theme: {
       marginTop: 16,
       fontSize: 16,
       color: theme.textMuted,
-    },
-    processingOverlay: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
-      justifyContent: "center",
-      alignItems: "center",
-      zIndex: 1000,
-      elevation: 1000,
-    },
-    processingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: "#ffffff",
-      fontWeight: "500",
     },
     errorContainer: {
       position: "absolute",

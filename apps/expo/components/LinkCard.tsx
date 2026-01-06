@@ -6,7 +6,7 @@
  * Pressing the card opens the URL, long pressing navigates to the edit screen.
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,8 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinkData } from "../types/link";
+import { fetchLinkMetadata } from "../services/metadata";
+import { updateLink } from "../services/storage";
 
 /**
  * Navigation param types
@@ -66,6 +68,41 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
       : null);
   const [imageLoading, setImageLoading] = useState<boolean>(!!displayImageUri);
   const [imageErrored, setImageErrored] = useState<boolean>(false);
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState<boolean>(false);
+  const fetchInProgressRef = useRef<boolean>(false);
+
+  /**
+   * Automatically fetches metadata when card renders if metadataFetched is false
+   */
+  useEffect(() => {
+    const fetchMetadataIfNeeded = async () => {
+      // Only fetch if metadata hasn't been fetched yet and we're not already fetching
+      if (!linkData.metadataFetched && !fetchInProgressRef.current) {
+        fetchInProgressRef.current = true;
+        try {
+          setIsFetchingMetadata(true);
+          const fetchedMetadata = await fetchLinkMetadata(linkData.url);
+
+          // Update the link in storage with fetched metadata
+          await updateLink(linkData.url, {
+            title: fetchedMetadata.title,
+            description: fetchedMetadata.description,
+            image: fetchedMetadata.image,
+            tag: fetchedMetadata.tag,
+            metadataFetched: true,
+          });
+        } catch (error) {
+          // Log error but don't block card display
+          console.error("Error fetching metadata for card:", error);
+        } finally {
+          setIsFetchingMetadata(false);
+          fetchInProgressRef.current = false;
+        }
+      }
+    };
+
+    fetchMetadataIfNeeded();
+  }, [linkData.url, linkData.metadataFetched]);
 
   /**
    * Handles opening the URL when the card is pressed
@@ -108,6 +145,13 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
     >
       {/* Content Section - Left Side */}
       <View style={styles.content}>
+        {/* Metadata Fetching Loader */}
+        {isFetchingMetadata && (
+          <View style={styles.metadataLoaderContainer}>
+            <ActivityIndicator size="small" color="#0066cc" />
+          </View>
+        )}
+
         {linkData.title ? (
           <Text style={titleStyle} numberOfLines={1} ellipsizeMode="tail">
             {linkData.title}
@@ -186,6 +230,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: 80,
     maxHeight: 120,
+    position: "relative",
   },
   cardDark: {
     backgroundColor: "#000000",
@@ -256,5 +301,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff",
     fontWeight: "600",
+  },
+  metadataLoaderContainer: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 10,
   },
 });

@@ -1,60 +1,26 @@
 /**
  * Metadata Service
  *
- * This file provides functions for fetching metadata from URLs using the backend API.
- * It extracts title, description, and image from shared links.
- * Uses new parsing strategy based on platform configuration and link types.
+ * This file provides functions for fetching metadata from URLs using client-side HTML parsing.
+ * It extracts title, description, and image from shared links by fetching the HTML
+ * and parsing it directly in the app.
  */
 
 import { LinkData } from "../types/link";
 import { detectHostnameTag } from "./hostnameTagDetection";
+import { parseHTML, ParsedMetadata } from "./htmlParser";
 
 /**
- * Backend API base URL
- *
- * In development:
- * - Use your machine's local IP address (not localhost or 0.0.0.0)
- * - Find your IP: On macOS/Linux run `ifconfig`, on Windows run `ipconfig`
- * - Example: http://192.168.1.100:8080
- * - React Native/Expo cannot use localhost as it refers to the device itself
- *
- * In production:
- * - Use your deployed backend URL
- *
- * Set this via EXPO_PUBLIC_API_URL environment variable in a .env file
- * or export it before running `npm start`
+ * Timeout duration for fetch requests in milliseconds
  */
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://0.0.0.0:8080";
-
-// Warn if using default URL (which won't work on physical devices)
-if (!process.env.EXPO_PUBLIC_API_URL) {
-  console.warn(
-    "⚠️  EXPO_PUBLIC_API_URL not set. Using default http://0.0.0.0:8080 which may not work.\n" +
-      "   Setup options:\n" +
-      "   1. Run: npm run setup:env (in apps/expo directory)\n" +
-      "   2. Create .env file with: EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080\n" +
-      "   3. For production: EXPO_PUBLIC_API_URL=https://your-app-runner-url.awsapprunner.com"
-  );
-} else {
-  const apiUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (apiUrl.startsWith("https://")) {
-    console.log(`✅ Using production API: ${apiUrl}`);
-  } else {
-    console.log(`✅ Using development API: ${apiUrl}`);
-  }
-}
+const FETCH_TIMEOUT = 10000; // 10 seconds
 
 /**
- * Timeout duration for API requests in milliseconds
- */
-const API_TIMEOUT = 10000; // 10 seconds
-
-/**
- * Fetches metadata (title, description, image) from a URL using the backend API
+ * Fetches metadata (title, description, image) from a URL by parsing HTML client-side
  *
  * @param url - The URL to fetch metadata for
  * @returns Promise<LinkData> - Link data object with metadata
- * @throws Error if API request fails
+ * @throws Error if URL is invalid or fetch fails
  */
 export async function fetchLinkMetadata(url: string): Promise<LinkData> {
   try {
@@ -69,8 +35,9 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
     }
 
     // Validate URL format
+    let urlObj: URL;
     try {
-      const urlObj = new URL(trimmedUrl);
+      urlObj = new URL(trimmedUrl);
       if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") {
         throw new Error(`Invalid URL format: ${trimmedUrl}`);
       }
@@ -78,21 +45,20 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
       throw new Error(`Invalid URL format: ${trimmedUrl}`);
     }
 
-    // Construct API endpoint URL
-    console.log("API base url:", API_BASE_URL);
-    const apiUrl = `${API_BASE_URL}/api/metadata?url=${encodeURIComponent(
-      trimmedUrl
-    )}`;
-    console.log("API called:", apiUrl);
-    // Fetch metadata from API with timeout
+    // Fetch HTML content with timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT);
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
+    let html: string;
     try {
-      const response = await fetch(apiUrl, {
+      const response = await fetch(trimmedUrl, {
         signal: controller.signal,
         headers: {
-          "Content-Type": "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
         },
       });
 
@@ -101,73 +67,90 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
       if (!response.ok) {
         // Handle specific HTTP error codes
         if (response.status === 400) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(
-            errorData.message || "Invalid URL. Please check the URL format."
-          );
-        } else if (response.status === 502) {
-          throw new Error(
-            "Failed to fetch metadata. The requested URL may be inaccessible."
-          );
-        } else if (response.status === 504) {
-          throw new Error(
-            "Request timed out. Please check your internet connection and try again."
-          );
+          throw new Error("Invalid URL. Please check the URL format.");
+        } else if (response.status === 404) {
+          throw new Error("Page not found. The URL may be incorrect or the page may have been removed.");
+        } else if (response.status === 403) {
+          throw new Error("Access forbidden. The website may be blocking requests.");
         } else if (response.status >= 500) {
           throw new Error("Server error. Please try again later.");
         } else {
-          const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message ||
-              `API request failed with status ${response.status}`
+            `Failed to fetch page with status ${response.status}`
           );
         }
       }
 
-      let data: LinkData;
-      try {
-        data = await response.json();
-      } catch (jsonError) {
-        throw new Error("Invalid JSON response from API");
+      // Check if response is HTML
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/html")) {
+        console.warn(
+          `Response is not HTML (content-type: ${contentType}). Attempting to parse anyway.`
+        );
       }
 
-      // Detect tag based on hostname (p0) with fallback to category
-      const detectedTag = detectHostnameTag(data.url || trimmedUrl, {
-        title: data.title,
-        description: data.description,
-      });
-
-      // Use detected tag if backend didn't provide one or if it's "Untitled"
-      if (!data.tag || data.tag === "Untitled") {
-        data.tag = detectedTag || "Untitled";
-      }
-
-      // Ensure sharedImages and createdAt are set
-      const linkData: LinkData = {
-        url: data.url || trimmedUrl,
-        title: data.title,
-        description: data.description,
-        image: data.image,
-        tag: data.tag,
-        sharedImages: data.sharedImages || [],
-        createdAt: data.createdAt || new Date().toISOString(),
-        metadataFetched: data.metadataFetched,
-      };
-
-      return linkData;
+      html = await response.text();
     } catch (fetchError: any) {
       clearTimeout(timeoutId);
 
       // Handle AbortError (timeout)
       if (fetchError.name === "AbortError") {
         throw new Error(
-          "API request timed out. Please check your internet connection and try again."
+          "Request timed out. Please check your internet connection and try again."
+        );
+      }
+
+      // Handle network errors
+      if (fetchError.message?.includes("Network request failed")) {
+        throw new Error(
+          "Network error. Please check your internet connection and try again."
         );
       }
 
       // Re-throw other fetch errors
       throw fetchError;
     }
+
+    // Parse HTML to extract metadata
+    let parsedMetadata: ParsedMetadata;
+    try {
+      parsedMetadata = parseHTML(html, trimmedUrl);
+    } catch (parseError) {
+      console.error("Error parsing HTML:", parseError);
+      throw new Error("Failed to parse HTML content from the URL.");
+    }
+
+    // Detect tag based on hostname with fallback to category
+    const detectedTag = detectHostnameTag(
+      parsedMetadata.url || trimmedUrl,
+      {
+        title: parsedMetadata.title,
+        description: parsedMetadata.description,
+      }
+    );
+
+    // Determine if metadata was successfully fetched
+    const hasMetadata =
+      Boolean(parsedMetadata.title && parsedMetadata.title.trim() !== "") ||
+      Boolean(
+        parsedMetadata.description &&
+          parsedMetadata.description.trim() !== ""
+      ) ||
+      Boolean(parsedMetadata.image && parsedMetadata.image.trim() !== "");
+
+    // Build link data
+    const linkData: LinkData = {
+      url: parsedMetadata.url || trimmedUrl,
+      title: parsedMetadata.title || null,
+      description: parsedMetadata.description || null,
+      image: parsedMetadata.image || null,
+      tag: hasMetadata ? detectedTag || "Untitled" : "Untitled",
+      sharedImages: [],
+      createdAt: new Date().toISOString(),
+      metadataFetched: hasMetadata,
+    };
+
+    return linkData;
   } catch (error) {
     console.error("Error fetching link metadata:", error);
 
@@ -178,8 +161,8 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
 
     const linkData: LinkData = {
       url: url.trim(),
-      title: "",
-      description: "",
+      title: null,
+      description: null,
       image: null,
       tag: detectedTag || "Untitled",
       sharedImages: [],
@@ -194,4 +177,3 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
     throw new Error("Unknown error occurred while fetching link metadata");
   }
 }
-

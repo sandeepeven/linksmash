@@ -16,7 +16,6 @@
     "baseUrl": ".",
     "paths": {
       "@linksmash/expo/*": ["apps/expo/*"],
-      "@linksmash/api/*": ["apps/api/*"],
       "@linksmash/shared/*": ["libs/shared/*"]
     }
   },
