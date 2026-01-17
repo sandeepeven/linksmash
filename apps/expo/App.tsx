@@ -38,8 +38,7 @@ import { saveLink, getLinks, deleteLink } from "./services/storage";
 import { LinkCard } from "./components/LinkCard";
 import { SafeAreaWrapper } from "./components/SafeAreaWrapper";
 import { EditLinkScreen } from "./screens/EditLinkScreen";
-import { extractUrlFromText } from "./services/linkParser";
-import { processLink, processLinkWithoutAPI } from "./services/linkProcessor";
+import { processLinkWithoutAPI } from "./services/linkProcessor";
 
 /**
  * Navigation param types
@@ -162,9 +161,7 @@ export default function App() {
     } catch (error) {
       console.error("Error saving shared URL:", error);
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to save shared link";
+        error instanceof Error ? error.message : "Failed to save shared link";
       setError(`Failed to save link: ${errorMessage}`);
     }
   };
