@@ -126,15 +126,9 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
     });
   };
 
-  const cardStyle = [
-    styles.card,
-    isDarkMode && styles.cardDark,
-  ];
+  const cardStyle = [styles.card, isDarkMode && styles.cardDark];
 
-  const titleStyle = [
-    styles.title,
-    isDarkMode && styles.titleDark,
-  ];
+  const titleStyle = [styles.title, isDarkMode && styles.titleDark];
 
   return (
     <TouchableOpacity
@@ -184,7 +178,7 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
             <Image
               source={{ uri: displayImageUri }}
               style={styles.image}
-              resizeMode="cover"
+              resizeMode="contain"
               onLoadEnd={() => setImageLoading(false)}
               onError={() => {
                 setImageLoading(false);
@@ -228,8 +222,7 @@ const styles = StyleSheet.create({
     elevation: 5,
     overflow: "hidden",
     flexDirection: "row",
-    minHeight: 80,
-    maxHeight: 120,
+    height: 80,
     position: "relative",
   },
   cardDark: {
@@ -243,7 +236,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: "bold",
     color: "#000000",
     marginBottom: 4,
@@ -252,10 +245,10 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   description: {
-    fontSize: 13,
+    fontSize: 10,
     color: "#666666",
     marginBottom: 6,
-    lineHeight: 18,
+    lineHeight: 10,
   },
   imageContainer: {
     width: 100,
@@ -292,13 +285,11 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: "#0066cc",
     borderRadius: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 3,
-    marginTop: 4,
-    marginBottom: 4,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#ffffff",
     fontWeight: "600",
   },

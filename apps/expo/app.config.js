@@ -17,7 +17,6 @@ try {
   require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 } catch (e) {
   // dotenv is optional - Expo SDK 49+ loads .env files automatically
-  // But explicit loading ensures it works when running from root via nx
 }
 
 

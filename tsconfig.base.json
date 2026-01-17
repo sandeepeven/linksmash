@@ -13,11 +13,7 @@
     "lib": ["ES2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "@linksmash/expo/*": ["apps/expo/*"],
-      "@linksmash/shared/*": ["libs/shared/*"]
-    }
+    "baseUrl": "."
   },
   "exclude": ["node_modules", "tmp"]
 }

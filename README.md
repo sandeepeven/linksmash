@@ -14,10 +14,9 @@ LinkSmash is a mobile application that allows you to save, organize, and manage 
 
 ## Architecture
 
-LinkSmash is built as a monorepo using [Nx](https://nx.dev/) with two main applications:
+LinkSmash is a React Native mobile application built with Expo:
 
 - **`apps/expo`**: React Native mobile app built with Expo
-- **`apps/api`**: Fastify-based backend API for metadata extraction
 
 ## Prerequisites
 
@@ -41,13 +40,6 @@ cd LinkSmash
 
 ```bash
 npm install
-```
-
-3. Install dependencies for each app:
-
-```bash
-cd apps/api && npm install && cd ../..
-cd apps/expo && npm install && cd ../..
 ```
 
 ## Environment Setup
@@ -84,52 +76,14 @@ EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8080
 
 **Note**: For development on physical devices, use your machine's local IP address instead of `localhost`. See `apps/expo/ENV_SETUP.md` for detailed instructions.
 
-### API Server
-
-The API server uses environment variables for configuration. Create a `.env` file in `apps/api`:
-
-```bash
-cd apps/api
-touch .env
-```
-
-Add the following variables (optional - defaults are provided):
-
-```env
-PORT=8080
-REDIS_URL=redis://localhost:6379
-LOG_LEVEL=info
-NODE_ENV=development
-```
-
 ## Running the Project
 
 ### Development Mode
 
-#### Start Both Apps (Recommended)
-
-Start both the API and Expo app simultaneously:
+**Start Expo app:**
 
 ```bash
-npm run start:all
-```
-
-#### Start Individual Apps
-
-**Start API server only:**
-
-```bash
-npm run start:api
-# or
-cd apps/api && npm run dev
-```
-
-The API will be available at `http://localhost:8080`
-
-**Start Expo app only:**
-
-```bash
-npm run start:expo
+npm start
 # or
 cd apps/expo && npm start
 ```
@@ -154,71 +108,22 @@ npm run ios
 npm run web
 ```
 
-## API Endpoints
-
-### Health Check
-
-```
-GET /health
-```
-
-Returns server status and timestamp.
-
-### Get Metadata
-
-```
-GET /api/metadata?url=<URL>
-```
-
-Fetches metadata for a given URL.
-
-**Query Parameters:**
-
-- `url` (required): The URL to fetch metadata for
-
-**Response:**
-
-```json
-{
-  "title": "Page Title",
-  "description": "Page description",
-  "image": "https://example.com/image.jpg",
-  "url": "https://example.com",
-  "platform": "web"
-}
-```
-
 ## Project Structure
 
 ```
 LinkSmash/
 ├── apps/
-│   ├── api/                 # Backend API service
-│   │   ├── src/
-│   │   │   ├── controllers/ # Request handlers
-│   │   │   ├── routes/      # API routes
-│   │   │   ├── services/    # Business logic
-│   │   │   │   └── platform-extractors/ # Platform-specific extractors
-│   │   │   ├── types/       # TypeScript types
-│   │   │   └── utils/       # Utility functions
-│   │   └── package.json
 │   └── expo/                # React Native mobile app
 │       ├── components/      # React components
 │       ├── screens/         # App screens
 │       ├── services/        # App services (storage, metadata, etc.)
 │       ├── types/           # TypeScript types
 │       └── package.json
-├── package.json             # Root package.json with workspace scripts
-└── nx.json                  # Nx monorepo configuration
+├── package.json             # Root package.json with scripts
+└── tsconfig.base.json       # TypeScript base configuration
 ```
 
 ## Building
-
-### Build API
-
-```bash
-npm run build:api
-```
 
 ### Build Expo App
 
@@ -245,13 +150,9 @@ npm run build-local:dev
 ### Root Level Scripts
 
 - `npm start` - Start Expo app
-- `npm run start:expo` - Start Expo app
-- `npm run start:api` - Start API server
-- `npm run start:all` - Start both API and Expo app
 - `npm run android` - Run on Android
 - `npm run ios` - Run on iOS
 - `npm run web` - Run on web
-- `npm run build:api` - Build API
 - `npm run prebuild` - Generate native code for Expo
 - `npm run prebuild:clean` - Clean prebuild
 
@@ -271,27 +172,16 @@ npm run build-local:dev
 - **React Navigation** - Navigation
 - **AsyncStorage** - Local storage
 
-### Backend
-
-- **Fastify** - Web framework
-- **TypeScript** - Type safety
-- **Playwright** - Browser automation and HTML parsing
-- **Redis** - Caching (optional)
-- **Zod** - Schema validation
-
 ### Infrastructure
 
-- **Nx** - Monorepo tooling
 - **AWS App Runner** - Deployment (see `DEPLOYMENT.md`)
 
 ## Troubleshooting
 
-### API Connection Issues
+### Environment Issues
 
-1. **Check API URL**: Ensure `EXPO_PUBLIC_API_URL` is set correctly in `apps/expo/.env`
-2. **Verify API is running**: Check that the API server is running on the expected port
-3. **Network connectivity**: Ensure your device/emulator can reach the API server
-4. **Restart Expo**: Always restart Expo after changing `.env` files
+1. **Check API URL**: Ensure `EXPO_PUBLIC_API_URL` is set correctly in `apps/expo/.env` if using an external API
+2. **Restart Expo**: Always restart Expo after changing `.env` files
 
 ### Build Issues
 
