@@ -6,7 +6,7 @@
  * and parsing it directly in the app.
  */
 
-import { LinkData } from "../types/link";
+import { LinkData, LinkPreviewResponse } from "../types/link";
 import { detectHostnameTag } from "./hostnameTagDetection";
 import { parseHTML, ParsedMetadata } from "./htmlParser";
 
@@ -14,6 +14,57 @@ import { parseHTML, ParsedMetadata } from "./htmlParser";
  * Timeout duration for fetch requests in milliseconds
  */
 const FETCH_TIMEOUT = 10000; // 10 seconds
+
+/**
+ * LinkPreview.net API endpoint
+ */
+const LINKPREVIEW_API_URL = "https://api.linkpreview.net/";
+
+/**
+ * Fetches metadata from linkpreview.net API as a fallback when HTML parsing fails
+ *
+ * @param url - The URL to fetch metadata for
+ * @returns Promise<LinkPreviewResponse | null> - Link preview response or null if API key is missing or request fails
+ */
+async function fetchLinkPreview(
+  url: string
+): Promise<LinkPreviewResponse | null> {
+  const apiKey = process.env.EXPO_PUBLIC_LINKPREVIEW_API_KEY;
+
+  if (!apiKey) {
+    console.warn("LinkPreview API key not found. Skipping fallback.");
+    return null;
+  }
+
+  try {
+    const response = await fetch(
+      `${LINKPREVIEW_API_URL}?q=${encodeURIComponent(url)}`,
+      {
+        headers: {
+          "X-Linkpreview-Api-Key": apiKey,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`LinkPreview API returned status ${response.status}`);
+      return null;
+    }
+
+    const data: LinkPreviewResponse = await response.json();
+
+    // Check if API returned an error
+    if (data.error) {
+      console.warn(`LinkPreview API error: ${data.error}`);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.warn("Error fetching from LinkPreview API:", error);
+    return null;
+  }
+}
 
 /**
  * Fetches metadata (title, description, image) from a URL by parsing HTML client-side
@@ -69,9 +120,13 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
         if (response.status === 400) {
           throw new Error("Invalid URL. Please check the URL format.");
         } else if (response.status === 404) {
-          throw new Error("Page not found. The URL may be incorrect or the page may have been removed.");
+          throw new Error(
+            "Page not found. The URL may be incorrect or the page may have been removed."
+          );
         } else if (response.status === 403) {
-          throw new Error("Access forbidden. The website may be blocking requests.");
+          throw new Error(
+            "Access forbidden. The website may be blocking requests."
+          );
         } else if (response.status >= 500) {
           throw new Error("Server error. Please try again later.");
         } else {
@@ -120,21 +175,52 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
       throw new Error("Failed to parse HTML content from the URL.");
     }
 
-    // Detect tag based on hostname with fallback to category
-    const detectedTag = detectHostnameTag(
-      parsedMetadata.url || trimmedUrl,
-      {
-        title: parsedMetadata.title,
-        description: parsedMetadata.description,
+    // Check if image or description is missing and fetch from LinkPreview as fallback
+    const isMissingImage =
+      !parsedMetadata.image || parsedMetadata.image.trim() === "";
+    const isMissingDescription =
+      !parsedMetadata.description || parsedMetadata.description.trim() === "";
+
+    if (isMissingImage || isMissingDescription) {
+      try {
+        const linkPreviewData = await fetchLinkPreview(trimmedUrl);
+
+        if (linkPreviewData) {
+          // Only fill missing fields, don't override existing ones
+          if (isMissingImage && linkPreviewData.image) {
+            parsedMetadata.image = linkPreviewData.image;
+          }
+          if (isMissingDescription && linkPreviewData.description) {
+            parsedMetadata.description = linkPreviewData.description;
+          }
+          // Optionally fill title if missing (though title is less critical)
+          if (
+            (!parsedMetadata.title || parsedMetadata.title.trim() === "") &&
+            linkPreviewData.title
+          ) {
+            parsedMetadata.title = linkPreviewData.title;
+          }
+        }
+      } catch (linkPreviewError) {
+        // If LinkPreview fails, continue with HTML parsed metadata
+        console.warn(
+          "LinkPreview fallback failed, using HTML parsed metadata:",
+          linkPreviewError
+        );
       }
-    );
+    }
+
+    // Detect tag based on hostname with fallback to category
+    const detectedTag = detectHostnameTag(parsedMetadata.url || trimmedUrl, {
+      title: parsedMetadata.title,
+      description: parsedMetadata.description,
+    });
 
     // Determine if metadata was successfully fetched
     const hasMetadata =
       Boolean(parsedMetadata.title && parsedMetadata.title.trim() !== "") ||
       Boolean(
-        parsedMetadata.description &&
-          parsedMetadata.description.trim() !== ""
+        parsedMetadata.description && parsedMetadata.description.trim() !== ""
       ) ||
       Boolean(parsedMetadata.image && parsedMetadata.image.trim() !== "");
 
