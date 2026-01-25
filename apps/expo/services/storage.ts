@@ -14,6 +14,11 @@ import { LinkData } from "../types/link";
 const STORAGE_KEY = "linksmash_links";
 
 /**
+ * Storage key for allow editing before save setting
+ */
+const ALLOW_EDITING_BEFORE_SAVE_KEY = "linksmash_allow_editing_before_save";
+
+/**
  * Saves a link object with metadata to AsyncStorage
  *
  * @param linkData - The link data object to save
@@ -216,5 +221,53 @@ export async function updateLink(
       throw new Error(`Failed to update link in storage: ${error.message}`);
     }
     throw new Error("Failed to update link in storage: Unknown error");
+  }
+}
+
+/**
+ * Retrieves the "allow editing before save" setting from AsyncStorage
+ * Defaults to true if the setting doesn't exist
+ *
+ * @returns Promise<boolean> - The setting value (true = ON, false = OFF)
+ * @throws Error if storage operation fails
+ */
+export async function getAllowEditingBeforeSave(): Promise<boolean> {
+  try {
+    const value = await AsyncStorage.getItem(ALLOW_EDITING_BEFORE_SAVE_KEY);
+    if (value === null) {
+      // Default to true if not set
+      await setAllowEditingBeforeSave(true);
+      return true;
+    }
+    return value === "true";
+  } catch (error) {
+    console.error("Error retrieving allow editing before save setting:", error);
+    // Default to true on error
+    return true;
+  }
+}
+
+/**
+ * Sets the "allow editing before save" setting in AsyncStorage
+ *
+ * @param value - The setting value (true = ON, false = OFF)
+ * @returns Promise<void> - Resolves when the setting is saved successfully
+ * @throws Error if storage operation fails
+ */
+export async function setAllowEditingBeforeSave(
+  value: boolean
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ALLOW_EDITING_BEFORE_SAVE_KEY, String(value));
+  } catch (error) {
+    console.error("Error saving allow editing before save setting:", error);
+    if (error instanceof Error) {
+      throw new Error(
+        `Failed to save allow editing before save setting: ${error.message}`
+      );
+    }
+    throw new Error(
+      "Failed to save allow editing before save setting: Unknown error"
+    );
   }
 }

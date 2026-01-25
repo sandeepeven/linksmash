@@ -20,6 +20,8 @@ import {
   ScrollView,
   TouchableOpacity,
   useColorScheme,
+  TextInput,
+  Share,
 } from "react-native";
 import {
   GestureHandlerRootView,
@@ -28,16 +30,25 @@ import {
 import {
   NavigationContainer,
   useFocusEffect,
+  useNavigation,
   DarkTheme as NavDarkTheme,
   DefaultTheme as NavLightTheme,
 } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import ReceiveSharingIntent from "react-native-receive-sharing-intent";
 import { LinkData } from "./types/link";
-import { saveLink, getLinks, deleteLink } from "./services/storage";
+import {
+  saveLink,
+  getLinks,
+  deleteLink,
+  getAllowEditingBeforeSave,
+} from "./services/storage";
 import { LinkCard } from "./components/LinkCard";
 import { SafeAreaWrapper } from "./components/SafeAreaWrapper";
 import { EditLinkScreen } from "./screens/EditLinkScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
+import { LinkEditModal } from "./components/LinkEditModal";
 import { processLinkWithoutAPI } from "./services/linkProcessor";
 
 /**
@@ -48,6 +59,7 @@ type RootStackParamList = {
   EditLink: {
     linkData: LinkData;
   };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -80,6 +92,10 @@ export default function App() {
   const [links, setLinks] = useState<LinkData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [pendingLinkData, setPendingLinkData] = useState<LinkData | null>(
+    null
+  );
 
   /**
    * Loads all stored links from AsyncStorage
@@ -124,8 +140,9 @@ export default function App() {
 
   /**
    * Handles processing a shared URL
-   * Saves link immediately without waiting for metadata fetch
-   * Metadata will be fetched automatically at the card level when the card renders
+   * Checks "allow editing before save" setting:
+   * - If ON: Shows modal for editing before saving
+   * - If OFF: Saves link immediately
    *
    * @param input - The shared URL or text containing a URL to process
    * @param attachedImages - Optional array of attached image URIs
@@ -151,19 +168,42 @@ export default function App() {
     try {
       setError(null);
 
-      // Save link immediately without waiting for metadata
-      // Metadata will be fetched automatically when the card renders
+      // Process link data
       const linkData = processLinkWithoutAPI(input, normalizedImages);
-      await saveLink(linkData);
 
-      // Reload links to update the UI
-      await loadStoredLinks();
+      // Check if "allow editing before save" is enabled
+      const allowEditing = await getAllowEditingBeforeSave();
+
+      if (allowEditing) {
+        // Show modal for editing
+        setPendingLinkData(linkData);
+        setModalVisible(true);
+      } else {
+        // Save immediately without modal
+        await saveLink(linkData);
+        await loadStoredLinks();
+      }
     } catch (error) {
-      console.error("Error saving shared URL:", error);
+      console.error("Error processing shared URL:", error);
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to save shared link";
-      setError(`Failed to save link: ${errorMessage}`);
+        error instanceof Error ? error.message : "Failed to process shared link";
+      setError(`Failed to process link: ${errorMessage}`);
     }
+  };
+
+  /**
+   * Handles modal close
+   */
+  const handleModalClose = () => {
+    setModalVisible(false);
+    setPendingLinkData(null);
+  };
+
+  /**
+   * Handles modal save - refreshes the links list
+   */
+  const handleModalSave = async () => {
+    await loadStoredLinks();
   };
 
   useEffect(() => {
@@ -284,21 +324,36 @@ export default function App() {
       >
         <Stack.Screen name="Home" options={{ headerShown: false }}>
           {() => (
-            <HomeScreen
-              links={links}
-              loading={loading}
-              error={error}
-              setError={setError}
-              loadStoredLinks={loadStoredLinks}
-              renderEmptyState={renderEmptyState}
-              renderLoading={renderLoading}
-            />
+            <>
+              <HomeScreen
+                links={links}
+                loading={loading}
+                error={error}
+                setError={setError}
+                loadStoredLinks={loadStoredLinks}
+                renderEmptyState={renderEmptyState}
+                renderLoading={renderLoading}
+              />
+              {pendingLinkData && (
+                <LinkEditModal
+                  visible={modalVisible}
+                  linkData={pendingLinkData}
+                  onClose={handleModalClose}
+                  onSave={handleModalSave}
+                />
+              )}
+            </>
           )}
         </Stack.Screen>
         <Stack.Screen
           name="EditLink"
           options={{ title: "Edit Link" }}
           component={EditLinkScreen}
+        />
+        <Stack.Screen
+          name="Settings"
+          options={{ title: "Settings" }}
+          component={SettingsScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>
@@ -329,6 +384,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   renderEmptyState,
   renderLoading,
 }) => {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const theme = useMemo(
@@ -350,6 +407,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   // Refresh links when screen comes into focus
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -363,11 +421,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   }, [links]);
 
   const filteredLinks = useMemo(() => {
-    if (!selectedTag) {
-      return links;
+    let filtered = links;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((link) => {
+        const titleMatch = link.title?.toLowerCase().includes(query);
+        const descriptionMatch = link.description?.toLowerCase().includes(query);
+        const urlMatch = link.url.toLowerCase().includes(query);
+        const tagMatch = link.tag?.toLowerCase().includes(query);
+        return titleMatch || descriptionMatch || urlMatch || tagMatch;
+      });
     }
-    return links.filter((link) => link.tag?.trim() === selectedTag);
-  }, [links, selectedTag]);
+
+    // Apply tag filter
+    if (selectedTag) {
+      filtered = filtered.filter((link) => link.tag?.trim() === selectedTag);
+    }
+
+    return filtered;
+  }, [links, selectedTag, searchQuery]);
 
   // Reload links when screen comes into focus (e.g., after editing)
   useFocusEffect(
@@ -391,10 +465,43 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
       <GestureHandlerRootView style={styles.container}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
 
+        {/* Settings Button */}
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => navigation.navigate("Settings")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.settingsButtonText}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
+
         {loading ? (
           renderLoading()
         ) : (
           <>
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search links..."
+                placeholderTextColor={theme.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity
+                  style={styles.clearButton}
+                  onPress={() => setSearchQuery("")}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.clearButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
             {availableTags.length > 0 && (
               <View style={styles.tagBarContainer}>
                 <ScrollView
@@ -452,6 +559,25 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                       </Text>
                     </View>
                   )}
+                  renderLeftActions={() => (
+                    <View style={styles.swipeShareContainer}>
+                      <Text
+                        style={styles.swipeShareText}
+                        onPress={async () => {
+                          try {
+                            await Share.share({
+                              message: item.url,
+                            });
+                          } catch (e) {
+                            console.error("Failed to share link:", e);
+                            setError("Failed to share link");
+                          }
+                        }}
+                      >
+                        Share
+                      </Text>
+                    </View>
+                  )}
                 >
                   <LinkCard linkData={item} index={index} />
                 </Swipeable>
@@ -506,6 +632,22 @@ function createStyles(theme: {
       flex: 1,
       backgroundColor: theme.background,
     },
+    headerContainer: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 8,
+      backgroundColor: theme.surface,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    settingsButton: {
+      padding: 8,
+    },
+    settingsButtonText: {
+      fontSize: 24,
+    },
     tagBarContainer: {
       paddingVertical: 10,
       paddingHorizontal: 16,
@@ -517,9 +659,38 @@ function createStyles(theme: {
       gap: 8,
       alignItems: "center",
     },
+    searchContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+      backgroundColor: theme.surface,
+    },
+    searchInput: {
+      flex: 1,
+      height: 40,
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      fontSize: 16,
+      color: theme.text,
+      backgroundColor: theme.background,
+    },
+    clearButton: {
+      marginLeft: 8,
+      padding: 8,
+    },
+    clearButtonText: {
+      fontSize: 18,
+      color: theme.textMuted,
+      fontWeight: "300",
+    },
     tagChip: {
-      paddingVertical: 6,
-      paddingHorizontal: 14,
+      paddingVertical: 8,
+      paddingHorizontal: 8,
       borderRadius: 16,
       backgroundColor: theme.chipBg,
       borderWidth: 1,
@@ -530,7 +701,7 @@ function createStyles(theme: {
       borderColor: theme.chipSelectedBorder,
     },
     tagChipText: {
-      fontSize: 14,
+      fontSize: 8,
       color: theme.textMuted,
       fontWeight: "600",
     },
@@ -608,6 +779,19 @@ function createStyles(theme: {
       borderRadius: 8,
     },
     swipeDeleteText: {
+      color: "#ffffff",
+      fontWeight: "700",
+      fontSize: 16,
+    },
+    swipeShareContainer: {
+      backgroundColor: "#0066cc",
+      justifyContent: "center",
+      alignItems: "flex-start",
+      paddingHorizontal: 20,
+      marginVertical: 8,
+      borderRadius: 8,
+    },
+    swipeShareText: {
       color: "#ffffff",
       fontWeight: "700",
       fontSize: 16,

@@ -14,12 +14,12 @@ import {
   Alert,
   ActivityIndicator,
   TouchableOpacity,
+  Share,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { updateLink } from "../services/storage";
-import { fetchLinkMetadata } from "../services/metadata";
 import { LinkData } from "../types/link";
 import { SafeAreaWrapper } from "../components/SafeAreaWrapper";
 
@@ -57,42 +57,23 @@ export const EditLinkScreen: React.FC = () => {
   const [image, setImage] = useState<string>(linkData.image || "");
   const [tag, setTag] = useState<string>(linkData.tag || "");
   const [saving, setSaving] = useState<boolean>(false);
-  const [fetchingMetadata, setFetchingMetadata] = useState<boolean>(false);
 
   /**
-   * Fetches metadata from the API and updates the link
+   * Handles sharing the link URL
    */
-  const handleFetchMetadata = async () => {
+  const handleShare = async () => {
     try {
-      setFetchingMetadata(true);
-      const fetchedMetadata = await fetchLinkMetadata(linkData.url);
-
-      // Update the link in storage with fetched metadata
-      await updateLink(linkData.url, {
-        title: fetchedMetadata.title,
-        description: fetchedMetadata.description,
-        image: fetchedMetadata.image,
-        tag: fetchedMetadata.tag,
-        metadataFetched: true,
+      await Share.share({
+        message: linkData.url,
       });
-
-      // Update local state to reflect fetched metadata
-      setTitle(fetchedMetadata.title || "");
-      setDescription(fetchedMetadata.description || "");
-      setImage(fetchedMetadata.image || "");
-      setTag(fetchedMetadata.tag || "");
-
-      Alert.alert("Success", "Metadata fetched successfully");
     } catch (error) {
-      console.error("Error fetching metadata:", error);
+      console.error("Error sharing link:", error);
       Alert.alert(
         "Error",
         error instanceof Error
           ? error.message
-          : "Failed to fetch metadata. Please try again."
+          : "Failed to share link. Please try again."
       );
-    } finally {
-      setFetchingMetadata(false);
     }
   };
 
@@ -240,27 +221,14 @@ export const EditLinkScreen: React.FC = () => {
           />
         </View>
 
-        {/* Fetch Info Button */}
+        {/* Share Button */}
         <View style={styles.fieldContainer}>
           <TouchableOpacity
-            style={[
-              styles.fetchButton,
-              fetchingMetadata && styles.fetchButtonDisabled,
-            ]}
-            onPress={handleFetchMetadata}
-            disabled={fetchingMetadata}
+            style={styles.shareButton}
+            onPress={handleShare}
             activeOpacity={0.7}
           >
-            {fetchingMetadata ? (
-              <View style={styles.fetchButtonContent}>
-                <ActivityIndicator size="small" color="#ffffff" />
-                <Text style={[styles.fetchButtonText, { marginLeft: 8 }]}>
-                  Fetching...
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.fetchButtonText}>FETCH INFO</Text>
-            )}
+            <Text style={styles.shareButtonText}>SHARE</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
@@ -323,7 +291,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#0066cc",
   },
-  fetchButton: {
+  shareButton: {
     backgroundColor: "#0066cc",
     borderRadius: 8,
     paddingVertical: 14,
@@ -332,14 +300,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 8,
   },
-  fetchButtonDisabled: {
-    opacity: 0.6,
-  },
-  fetchButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  fetchButtonText: {
+  shareButtonText: {
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
