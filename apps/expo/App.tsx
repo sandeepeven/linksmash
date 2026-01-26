@@ -9,7 +9,13 @@
  * - Displaying stored links in a list
  */
 
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   StyleSheet,
@@ -95,9 +101,7 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [pendingLinkData, setPendingLinkData] = useState<LinkData | null>(
-    null
-  );
+  const [pendingLinkData, setPendingLinkData] = useState<LinkData | null>(null);
 
   /**
    * Loads all stored links from AsyncStorage
@@ -188,7 +192,9 @@ export default function App() {
     } catch (error) {
       console.error("Error processing shared URL:", error);
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to process shared link";
+        error instanceof Error
+          ? error.message
+          : "Failed to process shared link";
       setError(`Failed to process link: ${errorMessage}`);
     }
   };
@@ -435,7 +441,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter((link) => {
         const titleMatch = link.title?.toLowerCase().includes(query);
-        const descriptionMatch = link.description?.toLowerCase().includes(query);
+        const descriptionMatch = link.description
+          ?.toLowerCase()
+          .includes(query);
         const urlMatch = link.url.toLowerCase().includes(query);
         const tagMatch = link.tag?.toLowerCase().includes(query);
         return titleMatch || descriptionMatch || urlMatch || tagMatch;
@@ -594,10 +602,15 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                   useNativeDriver: false,
                   listener: (event: any) => {
                     const currentScrollY = event.nativeEvent.contentOffset.y;
-                    const scrollDifference = currentScrollY - lastScrollY.current;
+                    const scrollDifference =
+                      currentScrollY - lastScrollY.current;
 
                     // Hide tab bar when scrolling up (positive difference means scrolling down in content)
-                    if (scrollDifference > 10 && isTabBarVisible && currentScrollY > 10) {
+                    if (
+                      scrollDifference > 10 &&
+                      isTabBarVisible &&
+                      currentScrollY > 10
+                    ) {
                       setIsTabBarVisible(false);
                       Animated.timing(tabBarTranslateY, {
                         toValue: 100,
@@ -893,13 +906,13 @@ function createStyles(theme: {
       flexDirection: "row",
       justifyContent: "space-around",
       alignItems: "center",
-      paddingVertical: 8,
+      paddingVertical: 3,
     },
     bottomTabItem: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 8,
+      paddingVertical: 4,
     },
     bottomTabItemActive: {
       // Active state styling if needed

@@ -181,7 +181,7 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
     const isMissingDescription =
       !parsedMetadata.description || parsedMetadata.description.trim() === "";
 
-    if (isMissingImage || isMissingDescription) {
+    if (isMissingDescription) {
       try {
         const linkPreviewData = await fetchLinkPreview(trimmedUrl);
 

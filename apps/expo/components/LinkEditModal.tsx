@@ -342,7 +342,7 @@ function createStyles(theme: {
       backgroundColor: theme.surface,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      maxHeight: "75%",
+      maxHeight: "82%",
       minHeight: "50%",
       position: "relative",
     },
