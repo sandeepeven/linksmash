@@ -343,7 +343,7 @@ function createStyles(theme: {
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       maxHeight: "82%",
-      minHeight: "50%",
+      minHeight: "70%",
       position: "relative",
     },
     modalHeader: {
@@ -460,4 +460,3 @@ function createStyles(theme: {
     },
   });
 }
-
