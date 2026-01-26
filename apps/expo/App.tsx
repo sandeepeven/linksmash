@@ -9,7 +9,7 @@
  * - Displaying stored links in a list
  */
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   StyleSheet,
@@ -22,7 +22,9 @@ import {
   useColorScheme,
   TextInput,
   Share,
+  Animated,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   GestureHandlerRootView,
   Swipeable,
@@ -408,6 +410,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"Home" | "Settings">("Home");
+  const [isTabBarVisible, setIsTabBarVisible] = useState<boolean>(true);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const lastScrollY = useRef(0);
+  const tabBarTranslateY = useRef(new Animated.Value(0)).current;
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -447,6 +454,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   useFocusEffect(
     React.useCallback(() => {
       loadStoredLinks();
+      setActiveTab("Home");
     }, [loadStoredLinks])
   );
 
@@ -464,17 +472,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     <SafeAreaWrapper style={styles.safeArea}>
       <GestureHandlerRootView style={styles.container}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
-
-        {/* Settings Button */}
-        <View style={styles.headerContainer}>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => navigation.navigate("Settings")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.settingsButtonText}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
 
         {loading ? (
           renderLoading()
@@ -586,11 +583,43 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
               contentContainerStyle={
                 filteredLinks.length === 0
                   ? styles.emptyListContainer
-                  : { paddingTop: 12, paddingBottom: 12 }
+                  : { paddingTop: 12, paddingBottom: 80 }
               }
               showsVerticalScrollIndicator={true}
               refreshing={refreshing}
               onRefresh={handleRefresh}
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                {
+                  useNativeDriver: false,
+                  listener: (event: any) => {
+                    const currentScrollY = event.nativeEvent.contentOffset.y;
+                    const scrollDifference = currentScrollY - lastScrollY.current;
+
+                    // Hide tab bar when scrolling up (positive difference means scrolling down in content)
+                    if (scrollDifference > 10 && isTabBarVisible && currentScrollY > 10) {
+                      setIsTabBarVisible(false);
+                      Animated.timing(tabBarTranslateY, {
+                        toValue: 100,
+                        duration: 200,
+                        useNativeDriver: true,
+                      }).start();
+                    }
+                    // Show tab bar when scrolling down past 10px threshold (negative difference means scrolling up in content)
+                    else if (scrollDifference < -10 && !isTabBarVisible) {
+                      setIsTabBarVisible(true);
+                      Animated.timing(tabBarTranslateY, {
+                        toValue: 0,
+                        duration: 200,
+                        useNativeDriver: true,
+                      }).start();
+                    }
+
+                    lastScrollY.current = currentScrollY;
+                  },
+                }
+              )}
+              scrollEventThrottle={16}
             />
           </>
         )}
@@ -603,6 +632,65 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
             </Text>
           </View>
         )}
+
+        {/* Bottom Tab Navigation */}
+        <Animated.View
+          style={[
+            styles.bottomTabBar,
+            {
+              transform: [
+                {
+                  translateY: tabBarTranslateY,
+                },
+              ],
+            },
+          ]}
+        >
+          <SafeAreaView edges={["bottom"]} style={styles.bottomTabSafeArea}>
+            <TouchableOpacity
+              style={[
+                styles.bottomTabItem,
+                activeTab === "Home" && styles.bottomTabItemActive,
+              ]}
+              onPress={() => {
+                setActiveTab("Home");
+                // Already on Home screen, no navigation needed
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.bottomTabIcon}>🏠</Text>
+              <Text
+                style={[
+                  styles.bottomTabLabel,
+                  activeTab === "Home" && styles.bottomTabLabelActive,
+                ]}
+              >
+                Home
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.bottomTabItem,
+                activeTab === "Settings" && styles.bottomTabItemActive,
+              ]}
+              onPress={() => {
+                setActiveTab("Settings");
+                navigation.navigate("Settings");
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.bottomTabIcon}>⚙️</Text>
+              <Text
+                style={[
+                  styles.bottomTabLabel,
+                  activeTab === "Settings" && styles.bottomTabLabelActive,
+                ]}
+              >
+                Settings
+              </Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </Animated.View>
       </GestureHandlerRootView>
     </SafeAreaWrapper>
   );
@@ -631,22 +719,6 @@ function createStyles(theme: {
     container: {
       flex: 1,
       backgroundColor: theme.background,
-    },
-    headerContainer: {
-      flexDirection: "row",
-      justifyContent: "flex-end",
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 8,
-      backgroundColor: theme.surface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
-    },
-    settingsButton: {
-      padding: 8,
-    },
-    settingsButtonText: {
-      fontSize: 24,
     },
     tagBarContainer: {
       paddingVertical: 10,
@@ -701,7 +773,7 @@ function createStyles(theme: {
       borderColor: theme.chipSelectedBorder,
     },
     tagChipText: {
-      fontSize: 8,
+      fontSize: 10,
       color: theme.textMuted,
       fontWeight: "600",
     },
@@ -775,8 +847,10 @@ function createStyles(theme: {
       justifyContent: "center",
       alignItems: "flex-end",
       paddingHorizontal: 20,
-      marginVertical: 8,
+      marginVertical: 6,
+      marginHorizontal: 16,
       borderRadius: 8,
+      overflow: "hidden",
     },
     swipeDeleteText: {
       color: "#ffffff",
@@ -788,13 +862,60 @@ function createStyles(theme: {
       justifyContent: "center",
       alignItems: "flex-start",
       paddingHorizontal: 20,
-      marginVertical: 8,
+      marginVertical: 6,
+      marginHorizontal: 16,
       borderRadius: 8,
+      overflow: "hidden",
     },
     swipeShareText: {
       color: "#ffffff",
       fontWeight: "700",
       fontSize: 16,
+    },
+    bottomTabBar: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: theme.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: -2,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    bottomTabSafeArea: {
+      flexDirection: "row",
+      justifyContent: "space-around",
+      alignItems: "center",
+      paddingVertical: 8,
+    },
+    bottomTabItem: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 8,
+    },
+    bottomTabItemActive: {
+      // Active state styling if needed
+    },
+    bottomTabIcon: {
+      fontSize: 24,
+      marginBottom: 4,
+    },
+    bottomTabLabel: {
+      fontSize: 12,
+      color: theme.textMuted,
+      fontWeight: "500",
+    },
+    bottomTabLabelActive: {
+      color: "#0066cc",
+      fontWeight: "600",
     },
   });
 }

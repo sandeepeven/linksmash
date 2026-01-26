@@ -176,112 +176,114 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
               </TouchableOpacity>
             </View>
 
-            <KeyboardAwareScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              enableOnAndroid
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* Loader overlay during metadata fetch */}
-              {fetchingMetadata && (
-                <View style={styles.loaderOverlay}>
-                  <ActivityIndicator size="large" color="#0066cc" />
-                  <Text style={styles.loaderText}>Fetching metadata...</Text>
+            <View style={styles.modalContentWrapper}>
+              <KeyboardAwareScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                enableOnAndroid
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Loader overlay during metadata fetch */}
+                {fetchingMetadata && (
+                  <View style={styles.loaderOverlay}>
+                    <ActivityIndicator size="large" color="#0066cc" />
+                    <Text style={styles.loaderText}>Fetching metadata...</Text>
+                  </View>
+                )}
+
+                {/* URL Field (Read-only) */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>URL</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputDisabled]}
+                    value={linkData.url}
+                    editable={false}
+                    selectTextOnFocus={false}
+                    placeholder="URL"
+                  />
+                  <Text style={styles.helpText}>URL cannot be modified</Text>
                 </View>
-              )}
 
-              {/* URL Field (Read-only) */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>URL</Text>
-                <TextInput
-                  style={[styles.input, styles.inputDisabled]}
-                  value={linkData.url}
-                  editable={false}
-                  selectTextOnFocus={false}
-                  placeholder="URL"
-                />
-                <Text style={styles.helpText}>URL cannot be modified</Text>
-              </View>
+                {/* Title Field */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Title</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={title}
+                    onChangeText={setTitle}
+                    placeholder="Enter title"
+                    autoCapitalize="sentences"
+                    autoCorrect={true}
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      descriptionInputRef.current?.focus();
+                    }}
+                    editable={!fetchingMetadata}
+                  />
+                </View>
 
-              {/* Title Field */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Title</Text>
-                <TextInput
-                  style={styles.input}
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="Enter title"
-                  autoCapitalize="sentences"
-                  autoCorrect={true}
-                  returnKeyType="next"
-                  onSubmitEditing={() => {
-                    descriptionInputRef.current?.focus();
-                  }}
-                  editable={!fetchingMetadata}
-                />
-              </View>
+                {/* Description Field */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Description</Text>
+                  <TextInput
+                    ref={descriptionInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="Enter description"
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    autoCapitalize="sentences"
+                    autoCorrect={true}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => {
+                      imageInputRef.current?.focus();
+                    }}
+                    editable={!fetchingMetadata}
+                  />
+                </View>
 
-              {/* Description Field */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Description</Text>
-                <TextInput
-                  ref={descriptionInputRef}
-                  style={[styles.input, styles.textArea]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Enter description"
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  autoCapitalize="sentences"
-                  autoCorrect={true}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => {
-                    imageInputRef.current?.focus();
-                  }}
-                  editable={!fetchingMetadata}
-                />
-              </View>
+                {/* Image URL Field */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Image URL</Text>
+                  <TextInput
+                    ref={imageInputRef}
+                    style={styles.input}
+                    value={image}
+                    onChangeText={setImage}
+                    placeholder="Enter image URL"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                    returnKeyType="next"
+                    onSubmitEditing={() => {
+                      tagInputRef.current?.focus();
+                    }}
+                    editable={!fetchingMetadata}
+                  />
+                </View>
 
-              {/* Image URL Field */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Image URL</Text>
-                <TextInput
-                  ref={imageInputRef}
-                  style={styles.input}
-                  value={image}
-                  onChangeText={setImage}
-                  placeholder="Enter image URL"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  returnKeyType="next"
-                  onSubmitEditing={() => {
-                    tagInputRef.current?.focus();
-                  }}
-                  editable={!fetchingMetadata}
-                />
-              </View>
+                {/* Tag Field */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Tag</Text>
+                  <TextInput
+                    ref={tagInputRef}
+                    style={styles.input}
+                    value={tag}
+                    onChangeText={setTag}
+                    placeholder="Enter tag (e.g., shopping, news, social)"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={() => tagInputRef.current?.blur()}
+                    editable={!fetchingMetadata}
+                  />
+                </View>
+              </KeyboardAwareScrollView>
 
-              {/* Tag Field */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Tag</Text>
-                <TextInput
-                  ref={tagInputRef}
-                  style={styles.input}
-                  value={tag}
-                  onChangeText={setTag}
-                  placeholder="Enter tag (e.g., shopping, news, social)"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  onSubmitEditing={() => tagInputRef.current?.blur()}
-                  editable={!fetchingMetadata}
-                />
-              </View>
-
-              {/* Save Button */}
+              {/* Save Button - Positioned absolutely at bottom */}
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[
@@ -304,7 +306,7 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
                   )}
                 </TouchableOpacity>
               </View>
-            </KeyboardAwareScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -340,8 +342,9 @@ function createStyles(theme: {
       backgroundColor: theme.surface,
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
-      maxHeight: "90%",
+      maxHeight: "75%",
       minHeight: "50%",
+      position: "relative",
     },
     modalHeader: {
       flexDirection: "row",
@@ -365,12 +368,16 @@ function createStyles(theme: {
       color: theme.textMuted,
       fontWeight: "300",
     },
+    modalContentWrapper: {
+      flex: 1,
+      position: "relative",
+    },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
       paddingHorizontal: 16,
-      paddingBottom: 16,
+      paddingBottom: 100,
     },
     loaderOverlay: {
       position: "absolute",
@@ -420,9 +427,16 @@ function createStyles(theme: {
       marginTop: 4,
     },
     buttonContainer: {
+      position: "absolute",
+      bottom: 0,
+      left: 0,
+      right: 0,
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 16,
+      backgroundColor: theme.surface,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
     },
     saveButton: {
       backgroundColor: "#0066cc",
