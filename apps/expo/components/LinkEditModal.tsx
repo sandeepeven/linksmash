@@ -5,7 +5,7 @@
  * It allows users to edit link details before saving, with automatic metadata fetching.
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -70,10 +70,49 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
   const tagInputRef = useRef<TextInput | null>(null);
 
   /**
+   * Fetches metadata from the API and populates form fields
+   * Memoized with useCallback to prevent stale closures
+   */
+  const fetchMetadata = useCallback(async () => {
+    // Validate that linkData has a valid URL before fetching
+    if (!linkData || !linkData.url || linkData.url.trim() === "") {
+      console.warn("Cannot fetch metadata: invalid or missing URL");
+      return;
+    }
+
+    try {
+      setFetchingMetadata(true);
+      const fetchedMetadata = await fetchLinkMetadata(linkData.url);
+
+      // Populate form fields with fetched metadata, preserving existing values if fetched ones are empty
+      if (fetchedMetadata.title) {
+        setTitle(fetchedMetadata.title);
+      }
+      if (fetchedMetadata.description) {
+        setDescription(fetchedMetadata.description);
+      }
+      if (fetchedMetadata.image) {
+        setImage(fetchedMetadata.image);
+      }
+      if (fetchedMetadata.tag) {
+        setTag(fetchedMetadata.tag);
+      }
+    } catch (error) {
+      console.error("Error fetching metadata:", error);
+      // Show toast error but don't overwrite existing form values
+      setToastMessage("Unable to fetch link details. Using default values.");
+      setShowToast(true);
+    } finally {
+      setFetchingMetadata(false);
+    }
+  }, [linkData.url]);
+
+  /**
    * Resets form fields when modal opens with new link data
    */
   useEffect(() => {
-    if (visible) {
+    if (visible && linkData && linkData.url) {
+      // Initialize form fields from linkData
       setTitle(linkData.title || "");
       setDescription(linkData.description || "");
       setImage(linkData.image || "");
@@ -85,30 +124,7 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
       // Auto-fetch metadata when modal opens
       fetchMetadata();
     }
-  }, [visible, linkData.url]);
-
-  /**
-   * Fetches metadata from the API and populates form fields
-   */
-  const fetchMetadata = async () => {
-    try {
-      setFetchingMetadata(true);
-      const fetchedMetadata = await fetchLinkMetadata(linkData.url);
-
-      // Populate form fields with fetched metadata
-      setTitle(fetchedMetadata.title || "");
-      setDescription(fetchedMetadata.description || "");
-      setImage(fetchedMetadata.image || "");
-      setTag(fetchedMetadata.tag || "");
-    } catch (error) {
-      console.error("Error fetching metadata:", error);
-      // Show toast error
-      setToastMessage("Unable to fetch link details. Using default values.");
-      setShowToast(true);
-    } finally {
-      setFetchingMetadata(false);
-    }
-  };
+  }, [visible, linkData.url, fetchMetadata]);
 
   /**
    * Handles saving the link with edited values

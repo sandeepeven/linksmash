@@ -177,6 +177,11 @@ export default function App() {
       // Process link data
       const linkData = processLinkWithoutAPI(input, normalizedImages);
 
+      // Validate that linkData has a valid URL
+      if (!linkData || !linkData.url || linkData.url.trim() === "") {
+        throw new Error("Failed to extract valid URL from shared content");
+      }
+
       // Check if "allow editing before save" is enabled
       const allowEditing = await getAllowEditingBeforeSave();
 
