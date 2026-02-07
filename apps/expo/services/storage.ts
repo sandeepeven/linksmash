@@ -48,6 +48,7 @@ export async function saveLink(linkData: LinkData): Promise<void> {
         }
         existingLinks = existingLinks.map((link) => ({
           ...link,
+          folderId: link.folderId ?? null, // Ensure folderId exists, default to null
           sharedImages: Array.isArray(link.sharedImages)
             ? link.sharedImages
             : [],
@@ -110,6 +111,7 @@ export async function getLinks(): Promise<LinkData[]> {
 
       return validLinks.map((link) => ({
         ...link,
+        folderId: link.folderId ?? null, // Ensure folderId exists, default to null (migration)
         sharedImages: Array.isArray(link.sharedImages) ? link.sharedImages : [],
       }));
     } catch (parseError) {
@@ -162,21 +164,6 @@ export async function deleteLink(url: string): Promise<void> {
 }
 
 /**
- * Clears all stored links from AsyncStorage
- *
- * @returns Promise<void> - Resolves when all links are cleared
- * @throws Error if storage operation fails
- */
-export async function clearAllLinks(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.error("Error clearing links from storage:", error);
-    throw new Error("Failed to clear links from storage");
-  }
-}
-
-/**
  * Updates an existing link by URL
  * The URL field cannot be changed (it is preserved from the original link)
  *
@@ -208,6 +195,7 @@ export async function updateLink(
       ...updatedLinkData,
       url: originalLink.url, // URL cannot be changed
       createdAt: originalLink.createdAt, // CreatedAt cannot be changed
+      folderId: updatedLinkData.folderId !== undefined ? updatedLinkData.folderId : originalLink.folderId ?? null, // Handle folderId update
     };
 
     // Replace the link at the found index

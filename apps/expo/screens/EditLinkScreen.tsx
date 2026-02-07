@@ -22,6 +22,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view
 import { updateLink } from "../services/storage";
 import { LinkData } from "../types/link";
 import { SafeAreaWrapper } from "../components/SafeAreaWrapper";
+import { FolderSelector } from "../components/FolderSelector";
 
 /**
  * Navigation param types
@@ -56,6 +57,9 @@ export const EditLinkScreen: React.FC = () => {
   );
   const [image, setImage] = useState<string>(linkData.image || "");
   const [tag, setTag] = useState<string>(linkData.tag || "");
+  const [folderId, setFolderId] = useState<string | null>(
+    linkData.folderId || null
+  );
   const [saving, setSaving] = useState<boolean>(false);
 
   /**
@@ -90,6 +94,7 @@ export const EditLinkScreen: React.FC = () => {
         description: description.trim() || null,
         image: image.trim() || null,
         tag: tag.trim() || null,
+        folderId: folderId,
       };
 
       // Update the link in storage (using URL to find the link)
@@ -123,7 +128,7 @@ export const EditLinkScreen: React.FC = () => {
         </View>
       ),
     });
-  }, [navigation, title, description, image, tag, saving]);
+  }, [navigation, title, description, image, tag, folderId, saving]);
 
   return (
     <SafeAreaWrapper style={styles.safeArea}>
@@ -216,8 +221,17 @@ export const EditLinkScreen: React.FC = () => {
             placeholder="Enter tag (e.g., shopping, news, social)"
             autoCapitalize="none"
             autoCorrect={false}
-            returnKeyType="done"
+            returnKeyType="next"
             onSubmitEditing={() => tagInputRef.current?.blur()}
+          />
+        </View>
+
+        {/* Folder Field */}
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Folder</Text>
+          <FolderSelector
+            selectedFolderId={folderId}
+            onSelect={setFolderId}
           />
         </View>
 

@@ -44,10 +44,12 @@ type HomeScreenNavigationProp = NativeStackNavigationProp<
  *
  * @property linkData - The link data object containing URL and metadata
  * @property index - The index of the link in the list (used for navigation)
+ * @property folderName - Optional folder name to display (if link is assigned to a folder)
  */
 interface LinkCardProps {
   linkData: LinkData;
   index: number;
+  folderName?: string | null;
 }
 
 /**
@@ -57,7 +59,11 @@ interface LinkCardProps {
  * @param index - The index of the link in the list
  * @returns JSX.Element - The rendered link card component
  */
-export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
+export const LinkCard: React.FC<LinkCardProps> = ({
+  linkData,
+  index,
+  folderName,
+}) => {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -66,7 +72,10 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
     (Array.isArray(linkData.sharedImages) && linkData.sharedImages.length > 0
       ? linkData.sharedImages[0]
       : null);
-  const [imageLoading, setImageLoading] = useState<boolean>(!!displayImageUri);
+  // Only show loading if there's actually an image URI to load
+  const [imageLoading, setImageLoading] = useState<boolean>(
+    !!displayImageUri && displayImageUri.trim() !== ""
+  );
   const [imageErrored, setImageErrored] = useState<boolean>(false);
   const [isFetchingMetadata, setIsFetchingMetadata] = useState<boolean>(false);
   const fetchInProgressRef = useRef<boolean>(false);
@@ -158,12 +167,19 @@ export const LinkCard: React.FC<LinkCardProps> = ({ linkData, index }) => {
           </Text>
         ) : null}
 
-        {/* Tag Badge */}
-        {linkData.tag && (
-          <View style={styles.tagContainer}>
-            <Text style={styles.tagText}>{linkData.tag}</Text>
-          </View>
-        )}
+        {/* Tag and Folder Badges */}
+        <View style={styles.badgesContainer}>
+          {linkData.tag && (
+            <View style={styles.tagContainer}>
+              <Text style={styles.tagText}>{linkData.tag}</Text>
+            </View>
+          )}
+          {folderName && (
+            <View style={styles.folderContainer}>
+              <Text style={styles.folderText}>{folderName}</Text>
+            </View>
+          )}
+        </View>
       </View>
 
       {/* Image Section - Right Side */}
@@ -281,14 +297,30 @@ const styles = StyleSheet.create({
     color: "#999999",
     fontSize: 11,
   },
+  badgesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
   tagContainer: {
-    alignSelf: "flex-start",
     backgroundColor: "#0066cc",
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   tagText: {
+    fontSize: 10,
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  folderContainer: {
+    backgroundColor: "#808080",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  folderText: {
     fontSize: 10,
     color: "#ffffff",
     fontWeight: "600",

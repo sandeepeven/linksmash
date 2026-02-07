@@ -6,6 +6,7 @@
  */
 
 import { detectLinkTag } from "./tagDetection";
+import { extractHostname } from "./linkParser";
 
 /**
  * Popular hostnames that should be used as tags directly
@@ -101,22 +102,18 @@ const POPULAR_HOSTNAMES: Record<string, string> = {
  * @param url - The URL to extract hostname from
  * @returns string | null - The simplified hostname label or null if extraction fails
  */
-function extractHostname(url: string): string | null {
-  try {
-    const urlObj = new URL(url);
-    let hostname = urlObj.hostname.toLowerCase();
-    // Remove 'www.' prefix if present
-    if (hostname.startsWith("www.")) {
-      hostname = hostname.substring(4);
-    }
-    const parts = hostname.split(".").filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length === 1) return parts[0]; // e.g., localhost or single label
-    // Return the second-to-last label as a simple base name
-    return parts[parts.length - 2];
-  } catch {
+function extractSimplifiedHostname(url: string): string | null {
+  const hostname = extractHostname(url);
+  if (!hostname) {
     return null;
   }
+  
+  // Extract base domain (e.g., "blinkit" from "app.blinkit.com")
+  const parts = hostname.split(".");
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0]; // e.g., localhost or single label
+  // Return the second-to-last label as a simple base name
+  return parts[parts.length - 2];
 }
 
 /**
@@ -153,13 +150,10 @@ export function detectHostnameTag(
     }
   }
 
-  // Extract base domain (e.g., "blinkit" from "app.blinkit.com")
-  const parts = hostname.split(".");
-  if (parts.length >= 2) {
-    const baseDomain = parts[parts.length - 2]; // Second to last part
-    if (POPULAR_HOSTNAMES[baseDomain]) {
-      return POPULAR_HOSTNAMES[baseDomain];
-    }
+  // Extract simplified hostname and check
+  const simplifiedHostname = extractSimplifiedHostname(url);
+  if (simplifiedHostname && POPULAR_HOSTNAMES[simplifiedHostname]) {
+    return POPULAR_HOSTNAMES[simplifiedHostname];
   }
 
   // Fallback to category-based detection

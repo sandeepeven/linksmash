@@ -13,6 +13,7 @@
  * @property description - The description extracted from metadata (Open Graph or meta tag)
  * @property image - The image URL extracted from metadata (Open Graph or Twitter card)
  * @property tag - The automatically detected or manually assigned tag (e.g., "shopping", "news", "social")
+ * @property folderId - Optional ID of the folder this link belongs to
  * @property createdAt - ISO timestamp string indicating when the link was saved
  * @property metadataFetched - Boolean flag indicating whether metadata was successfully fetched
  */
@@ -22,6 +23,11 @@ export interface LinkData {
   description: string | null;
   image: string | null;
   tag: string | null;
+  /**
+   * Optional ID of the folder this link belongs to.
+   * If null, the link is not assigned to any folder.
+   */
+  folderId: string | null;
   /**
    * Array of URIs pointing to images shared alongside the link.
    * These may include local file paths (file:// or content://) or remote URLs.

@@ -21,6 +21,7 @@ import { LinkData } from "../types/link";
 import { fetchLinkMetadata } from "../services/metadata";
 import { saveLink } from "../services/storage";
 import { Toast } from "./Toast";
+import { FolderSelector } from "./FolderSelector";
 
 /**
  * Props for the LinkEditModal component
@@ -60,6 +61,9 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
   );
   const [image, setImage] = useState<string>(linkData.image || "");
   const [tag, setTag] = useState<string>(linkData.tag || "");
+  const [folderId, setFolderId] = useState<string | null>(
+    linkData.folderId || null
+  );
   const [fetchingMetadata, setFetchingMetadata] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [showToast, setShowToast] = useState<boolean>(false);
@@ -117,6 +121,7 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
       setDescription(linkData.description || "");
       setImage(linkData.image || "");
       setTag(linkData.tag || "");
+      setFolderId(linkData.folderId || null);
       setFetchingMetadata(false);
       setSaving(false);
       setShowToast(false);
@@ -140,6 +145,7 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
         description: description.trim() || null,
         image: image.trim() || null,
         tag: tag.trim() || null,
+        folderId: folderId,
         metadataFetched: true,
       };
 
@@ -295,6 +301,15 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
                     returnKeyType="done"
                     onSubmitEditing={() => tagInputRef.current?.blur()}
                     editable={!fetchingMetadata}
+                  />
+                </View>
+
+                {/* Folder Field */}
+                <View style={styles.fieldContainer}>
+                  <Text style={styles.label}>Folder</Text>
+                  <FolderSelector
+                    selectedFolderId={folderId}
+                    onSelect={setFolderId}
                   />
                 </View>
               </KeyboardAwareScrollView>

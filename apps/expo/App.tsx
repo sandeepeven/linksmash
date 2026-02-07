@@ -56,8 +56,13 @@ import { LinkCard } from "./components/LinkCard";
 import { SafeAreaWrapper } from "./components/SafeAreaWrapper";
 import { EditLinkScreen } from "./screens/EditLinkScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { FoldersScreen } from "./screens/FoldersScreen";
+import { FolderDetailScreen } from "./screens/FolderDetailScreen";
 import { LinkEditModal } from "./components/LinkEditModal";
 import { processLinkWithoutAPI } from "./services/linkProcessor";
+import { useTheme, createTheme } from "./utils/theme";
+import { getFolders } from "./services/folderStorage";
+import { Folder } from "./types/folder";
 
 /**
  * Navigation param types
@@ -66,6 +71,10 @@ type RootStackParamList = {
   Home: undefined;
   EditLink: {
     linkData: LinkData;
+  };
+  Folders: undefined;
+  FolderDetail: {
+    folderId: string;
   };
   Settings: undefined;
 };
@@ -80,21 +89,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function App() {
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
-  const theme = useMemo(
-    () => ({
-      background: isDarkMode ? "#0b0b0c" : "#ffffff",
-      surface: isDarkMode ? "#161718" : "#ffffff",
-      text: isDarkMode ? "#f2f4f7" : "#000000",
-      textMuted: isDarkMode ? "#c7c9ce" : "#666666",
-      border: isDarkMode ? "#2a2c2f" : "#e0e0e0",
-      chipBg: isDarkMode ? "#232527" : "#f2f4f7",
-      chipBorder: isDarkMode ? "#34363a" : "#d0d5dd",
-      chipSelectedBg: "#0066cc",
-      chipSelectedBorder: "#004a99",
-      errorBg: "#ff4444",
-    }),
-    [isDarkMode]
-  );
+  const theme = useMemo(() => createTheme(isDarkMode), [isDarkMode]);
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [links, setLinks] = useState<LinkData[]>([]);
@@ -364,6 +359,16 @@ export default function App() {
           component={EditLinkScreen}
         />
         <Stack.Screen
+          name="Folders"
+          options={{ title: "Folders" }}
+          component={FoldersScreen}
+        />
+        <Stack.Screen
+          name="FolderDetail"
+          options={{ title: "Folder" }}
+          component={FolderDetailScreen}
+        />
+        <Stack.Screen
           name="Settings"
           options={{ title: "Settings" }}
           component={SettingsScreen}
@@ -401,31 +406,40 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
-  const theme = useMemo(
-    () => ({
-      background: isDarkMode ? "#0b0b0c" : "#ffffff",
-      surface: isDarkMode ? "#161718" : "#ffffff",
-      text: isDarkMode ? "#f2f4f7" : "#000000",
-      textMuted: isDarkMode ? "#c7c9ce" : "#666666",
-      border: isDarkMode ? "#2a2c2f" : "#e0e0e0",
-      chipBg: isDarkMode ? "#232527" : "#f2f4f7",
-      chipBorder: isDarkMode ? "#34363a" : "#d0d5dd",
-      chipSelectedBg: "#0066cc",
-      chipSelectedBorder: "#004a99",
-      errorBg: "#ff4444",
-    }),
-    [isDarkMode]
-  );
+  const theme = useMemo(() => createTheme(isDarkMode), [isDarkMode]);
   const styles = useMemo(() => createStyles(theme), [theme]);
   // Refresh links when screen comes into focus
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"Home" | "Settings">("Home");
+  const [activeTab, setActiveTab] = useState<"Home" | "Folders" | "Settings">("Home");
   const [isTabBarVisible, setIsTabBarVisible] = useState<boolean>(true);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const scrollY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const tabBarTranslateY = useRef(new Animated.Value(0)).current;
+
+  // Create folder map for quick lookup
+  const folderMap = useMemo(() => {
+    const map = new Map<string, string>();
+    folders.forEach((folder) => {
+      map.set(folder.id, folder.name);
+    });
+    return map;
+  }, [folders]);
+
+  // Load folders
+  useEffect(() => {
+    const loadFolders = async () => {
+      try {
+        const allFolders = await getFolders();
+        setFolders(allFolders);
+      } catch (error) {
+        console.error("Error loading folders:", error);
+      }
+    };
+    loadFolders();
+  }, []);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -463,10 +477,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     return filtered;
   }, [links, selectedTag, searchQuery]);
 
-  // Reload links when screen comes into focus (e.g., after editing)
+  // Reload links and folders when screen comes into focus (e.g., after editing)
   useFocusEffect(
     React.useCallback(() => {
       loadStoredLinks();
+      const loadFolders = async () => {
+        try {
+          const allFolders = await getFolders();
+          setFolders(allFolders);
+        } catch (error) {
+          console.error("Error loading folders:", error);
+        }
+      };
+      loadFolders();
       setActiveTab("Home");
     }, [loadStoredLinks])
   );
@@ -589,7 +612,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                     </View>
                   )}
                 >
-                  <LinkCard linkData={item} index={index} />
+                  <LinkCard
+                    linkData={item}
+                    index={index}
+                    folderName={item.folderId ? folderMap.get(item.folderId) || null : null}
+                  />
                 </Swipeable>
               )}
               ListEmptyComponent={renderEmptyState}
@@ -689,6 +716,27 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
             <TouchableOpacity
               style={[
                 styles.bottomTabItem,
+                activeTab === "Folders" && styles.bottomTabItemActive,
+              ]}
+              onPress={() => {
+                setActiveTab("Folders");
+                navigation.navigate("Folders");
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.bottomTabIcon}>📁</Text>
+              <Text
+                style={[
+                  styles.bottomTabLabel,
+                  activeTab === "Folders" && styles.bottomTabLabelActive,
+                ]}
+              >
+                Folders
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.bottomTabItem,
                 activeTab === "Settings" && styles.bottomTabItemActive,
               ]}
               onPress={() => {
@@ -717,18 +765,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 /**
  * Styles for the App component (dynamic by theme)
  */
-function createStyles(theme: {
-  background: string;
-  surface: string;
-  text: string;
-  textMuted: string;
-  border: string;
-  chipBg: string;
-  chipBorder: string;
-  chipSelectedBg: string;
-  chipSelectedBorder: string;
-  errorBg: string;
-}) {
+function createStyles(theme: ReturnType<typeof createTheme>) {
   return StyleSheet.create({
     safeArea: {
       flex: 1,

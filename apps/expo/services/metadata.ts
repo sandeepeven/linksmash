@@ -9,6 +9,8 @@
 import { LinkData, LinkPreviewResponse } from "../types/link";
 import { detectHostnameTag } from "./hostnameTagDetection";
 import { parseHTML, ParsedMetadata } from "./htmlParser";
+import { isBlockedSite } from "./platformConfig";
+import { getDefaultImageUrl } from "./platformConfig";
 
 /**
  * Timeout duration for fetch requests in milliseconds
@@ -94,6 +96,24 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
       }
     } catch {
       throw new Error(`Invalid URL format: ${trimmedUrl}`);
+    }
+
+    // Check if site blocks scraping - if so, return default metadata immediately
+    if (isBlockedSite(trimmedUrl)) {
+      const defaultImageUrl = getDefaultImageUrl(trimmedUrl);
+      const detectedTag = detectHostnameTag(trimmedUrl);
+
+      return {
+        url: trimmedUrl,
+        title: null,
+        description: null,
+        image: defaultImageUrl,
+        tag: detectedTag || "general",
+        folderId: null,
+        sharedImages: [],
+        createdAt: new Date().toISOString(),
+        metadataFetched: false,
+      };
     }
 
     // Fetch HTML content with timeout
@@ -231,6 +251,7 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
       description: parsedMetadata.description || null,
       image: parsedMetadata.image || null,
       tag: hasMetadata ? detectedTag || "Untitled" : "Untitled",
+      folderId: null,
       sharedImages: [],
       createdAt: new Date().toISOString(),
       metadataFetched: hasMetadata,
@@ -251,6 +272,7 @@ export async function fetchLinkMetadata(url: string): Promise<LinkData> {
       description: null,
       image: null,
       tag: detectedTag || "Untitled",
+      folderId: null,
       sharedImages: [],
       createdAt: new Date().toISOString(),
       metadataFetched: false,
