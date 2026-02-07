@@ -12,6 +12,8 @@ import {
   StyleSheet,
   Switch,
   useColorScheme,
+  Linking,
+  TouchableOpacity,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -97,6 +99,20 @@ export const SettingsScreen: React.FC = () => {
             ios_backgroundColor={theme.border}
           />
         </View>
+
+        <View style={styles.aboutSpacer} />
+        <View style={styles.aboutSection}>
+          <Text style={styles.aboutText}>Made using Cursor</Text>
+          <Text style={styles.aboutText}>Made by Sandeep Singh</Text>
+          <TouchableOpacity
+            onPress={() =>
+              Linking.openURL("https://www.github.com/sandeepeven")
+            }
+            activeOpacity={0.7}
+          >
+            <Text style={styles.aboutLink}>Github</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaWrapper>
   );
@@ -145,6 +161,24 @@ function createStyles(theme: {
       fontSize: 14,
       color: theme.textMuted,
       lineHeight: 20,
+    },
+    aboutSpacer: {
+      flex: 1,
+    },
+    aboutSection: {
+      paddingBottom: 24,
+      alignItems: "center",
+    },
+    aboutText: {
+      fontSize: 16,
+      color: theme.textMuted,
+      marginBottom: 4,
+    },
+    aboutLink: {
+      fontSize: 16,
+      color: theme.textMuted,
+      marginTop: 4,
+      textDecorationLine: "underline",
     },
   });
 }

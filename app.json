@@ -1,5 +1,8 @@
 {
   "android": {
     "package": "com.x0089.linksmash"
+  },
+  "ios": {
+    "bundleIdentifier": "com.x0089.linksmash"
   }
 }

@@ -5,7 +5,7 @@
  * Long-press any folder to enter reorder mode; drag via handle to reorder; tick to save.
  */
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import {
   Alert,
   ActivityIndicator,
   useColorScheme,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -69,6 +71,9 @@ export const FoldersScreen: React.FC = () => {
   const [creating, setCreating] = useState<boolean>(false);
   const [isReorderMode, setIsReorderMode] = useState<boolean>(false);
   const [preReorderFolders, setPreReorderFolders] = useState<Folder[]>([]);
+  const [folderToEdit, setFolderToEdit] = useState<Folder | null>(null);
+  const [editFolderName, setEditFolderName] = useState<string>("");
+  const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
 
   /**
    * Loads all folders from storage
@@ -164,6 +169,49 @@ export const FoldersScreen: React.FC = () => {
   };
 
   /**
+   * Opens the edit-folder modal for the given folder and closes the swipe row
+   */
+  const handleOpenEditFolder = useCallback((folder: Folder) => {
+    swipeableRefs.current[folder.id]?.close();
+    setFolderToEdit(folder);
+    setEditFolderName(folder.name);
+  }, []);
+
+  /**
+   * Closes the edit-folder modal without saving
+   */
+  const handleCloseEditFolder = useCallback(() => {
+    setFolderToEdit(null);
+    setEditFolderName("");
+  }, []);
+
+  /**
+   * Saves the edited folder name and closes the modal
+   */
+  const handleSaveEditFolder = useCallback(async () => {
+    if (!folderToEdit) return;
+    const trimmed = editFolderName.trim();
+    if (!trimmed || trimmed === folderToEdit.name) return;
+    try {
+      await saveFolder({
+        id: folderToEdit.id,
+        name: trimmed,
+        isPublic: folderToEdit.isPublic,
+      });
+      await loadFolders();
+      handleCloseEditFolder();
+    } catch (error) {
+      console.error("Error renaming folder:", error);
+      Alert.alert(
+        "Error",
+        error instanceof Error
+          ? error.message
+          : "Failed to rename folder. Please try again."
+      );
+    }
+  }, [folderToEdit, editFolderName, loadFolders, handleCloseEditFolder]);
+
+  /**
    * Handles deleting a folder
    */
   const handleDeleteFolder = async (folder: Folder) => {
@@ -244,8 +292,25 @@ export const FoldersScreen: React.FC = () => {
       </View>
     );
 
+    const renderLeftActions = () => (
+      <View style={styles.swipeEditContainer}>
+        <TouchableOpacity
+          style={styles.swipeEditButton}
+          onPress={() => handleOpenEditFolder(item)}
+        >
+          <Text style={styles.swipeEditText}>Edit</Text>
+        </TouchableOpacity>
+      </View>
+    );
+
     return (
-      <Swipeable renderRightActions={renderRightActions}>
+      <Swipeable
+        ref={(ref) => {
+          swipeableRefs.current[item.id] = ref;
+        }}
+        renderRightActions={renderRightActions}
+        renderLeftActions={renderLeftActions}
+      >
         <TouchableOpacity
           style={styles.folderItem}
           activeOpacity={0.7}
@@ -408,6 +473,66 @@ export const FoldersScreen: React.FC = () => {
             )}
           </>
         )}
+
+        {/* Edit folder name modal */}
+        <Modal
+          visible={folderToEdit !== null}
+          transparent
+          onRequestClose={handleCloseEditFolder}
+          animationType="fade"
+        >
+          <Pressable
+            style={styles.editModalOverlay}
+            onPress={handleCloseEditFolder}
+          >
+            <Pressable
+              style={styles.editModalCard}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <TextInput
+                style={styles.editModalInput}
+                placeholder="Folder name"
+                placeholderTextColor={theme.textMuted}
+                value={editFolderName}
+                onChangeText={setEditFolderName}
+                autoFocus
+                editable={!!folderToEdit}
+              />
+              <View style={styles.editModalButtonRow}>
+                <TouchableOpacity
+                  style={styles.editModalCancelButton}
+                  onPress={handleCloseEditFolder}
+                >
+                  <Text style={styles.editModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.editModalSaveButton,
+                    (!editFolderName.trim() ||
+                      editFolderName.trim() === folderToEdit?.name) &&
+                      styles.editModalSaveButtonDisabled,
+                  ]}
+                  onPress={handleSaveEditFolder}
+                  disabled={
+                    !editFolderName.trim() ||
+                    editFolderName.trim() === folderToEdit?.name
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.editModalSaveText,
+                      (!editFolderName.trim() ||
+                        editFolderName.trim() === folderToEdit?.name) &&
+                        styles.editModalSaveTextDisabled,
+                    ]}
+                  >
+                    Save
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </GestureHandlerRootView>
     </SafeAreaWrapper>
   );
@@ -647,6 +772,79 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       color: "#ffffff",
       fontWeight: "700",
       fontSize: 16,
+    },
+    swipeEditContainer: {
+      backgroundColor: "#0066cc",
+      justifyContent: "center",
+      alignItems: "flex-start",
+      paddingHorizontal: 20,
+      marginVertical: 6,
+      marginHorizontal: 16,
+      borderRadius: 8,
+      overflow: "hidden",
+    },
+    swipeEditButton: {
+      justifyContent: "center",
+      alignItems: "center",
+      height: "100%",
+    },
+    swipeEditText: {
+      color: "#ffffff",
+      fontWeight: "700",
+      fontSize: 16,
+    },
+    editModalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 16,
+    },
+    editModalCard: {
+      width: "100%",
+      backgroundColor: "#ffffff",
+      borderRadius: 8,
+      padding: 20,
+    },
+    editModalInput: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: theme.text,
+      backgroundColor: theme.background,
+      marginBottom: 16,
+    },
+    editModalButtonRow: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: 12,
+    },
+    editModalCancelButton: {
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+    },
+    editModalCancelText: {
+      fontSize: 16,
+      color: theme.textMuted,
+    },
+    editModalSaveButton: {
+      backgroundColor: "#0066cc",
+      borderRadius: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+    },
+    editModalSaveButtonDisabled: {
+      opacity: 0.6,
+    },
+    editModalSaveText: {
+      fontSize: 16,
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+    editModalSaveTextDisabled: {
+      color: "rgba(255, 255, 255, 0.8)",
     },
   });
 }
