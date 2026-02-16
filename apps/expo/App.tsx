@@ -29,6 +29,8 @@ import {
   TextInput,
   Share,
   Animated,
+  AppState,
+  InteractionManager,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -187,7 +189,10 @@ export default function App() {
       } else {
         // Save immediately without modal
         await saveLink(linkData);
-        await loadStoredLinks();
+        // Defer list refresh to ensure UI re-renders after native callback completes
+        InteractionManager.runAfterInteractions(async () => {
+          await loadStoredLinks();
+        });
       }
     } catch (error) {
       console.error("Error processing shared URL:", error);
@@ -288,11 +293,37 @@ export default function App() {
       }
     };
 
-    ReceiveSharingIntent.getReceivedFiles(
-      successHandler,
-      errorHandler,
-      "ShareMedia" // Share extension name (can be customized)
+    /**
+     * Invokes getReceivedFiles - deferred until AppState is 'active' to avoid
+     * getCurrentActivity() being null in production release builds (Hermes loads
+     * JS before Activity is attached).
+     * Called on every transition to 'active' to handle warm start (app in background,
+     * user shares link - onNewIntent delivers intent when app resumes).
+     */
+    const invokeGetReceivedFiles = () => {
+      ReceiveSharingIntent.getReceivedFiles(
+        successHandler,
+        errorHandler,
+        "ShareMedia" // Share extension name (can be customized)
+      );
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextAppState: string) => {
+        if (nextAppState === "active") {
+          invokeGetReceivedFiles();
+        }
+      }
     );
+
+    if (AppState.currentState === "active") {
+      invokeGetReceivedFiles();
+    }
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   /**
