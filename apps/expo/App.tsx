@@ -424,6 +424,13 @@ interface HomeScreenProps {
   renderLoading: () => React.ReactElement;
 }
 
+/** Buffer (px) below which content is treated as non-scrollable */
+const SCROLL_BUFFER = 20;
+/** Extra bottom padding (px) so last items clear the tab bar */
+const BOTTOM_PADDING_EXTRA = 50;
+/** Base bottom padding (px) for tab bar clearance */
+const TAB_BAR_BASE_PADDING = 80;
+
 const HomeScreen: React.FC<HomeScreenProps> = ({
   links,
   loading,
@@ -445,10 +452,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"Home" | "Folders" | "Settings">("Home");
   const [isTabBarVisible, setIsTabBarVisible] = useState<boolean>(true);
+  const [isContentScrollable, setIsContentScrollable] = useState<boolean>(true);
   const [folders, setFolders] = useState<Folder[]>([]);
   const scrollY = useRef(new Animated.Value(0)).current;
   const lastScrollY = useRef(0);
   const tabBarTranslateY = useRef(new Animated.Value(0)).current;
+  const contentHeightRef = useRef(0);
+  const layoutHeightRef = useRef(0);
 
   // Create folder map for quick lookup
   const folderMap = useMemo(() => {
@@ -471,6 +481,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     };
     loadFolders();
   }, []);
+
+  // Keep tab bar visible when content is not scrollable (few items)
+  useEffect(() => {
+    if (!isContentScrollable) {
+      setIsTabBarVisible(true);
+      Animated.timing(tabBarTranslateY, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isContentScrollable]);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -534,6 +556,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const handleTagPress = (tag: string) => {
     setSelectedTag((current) => (current === tag ? null : tag));
   };
+
+  const updateScrollability = useCallback(() => {
+    const scrollable =
+      contentHeightRef.current > layoutHeightRef.current + SCROLL_BUFFER;
+    setIsContentScrollable(scrollable);
+  }, []);
 
   return (
     <SafeAreaWrapper style={styles.safeArea}>
@@ -654,7 +682,10 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
               contentContainerStyle={
                 filteredLinks.length === 0
                   ? styles.emptyListContainer
-                  : { paddingTop: 12, paddingBottom: 80 }
+                  : {
+                      paddingTop: 12,
+                      paddingBottom: TAB_BAR_BASE_PADDING + BOTTOM_PADDING_EXTRA,
+                    }
               }
               showsVerticalScrollIndicator={true}
               refreshing={refreshing}
@@ -668,11 +699,12 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                     const scrollDifference =
                       currentScrollY - lastScrollY.current;
 
-                    // Hide tab bar when scrolling up (positive difference means scrolling down in content)
+                    // Hide tab bar when scrolling down (only if content is scrollable)
                     if (
                       scrollDifference > 10 &&
                       isTabBarVisible &&
-                      currentScrollY > 10
+                      currentScrollY > 10 &&
+                      isContentScrollable
                     ) {
                       setIsTabBarVisible(false);
                       Animated.timing(tabBarTranslateY, {
@@ -696,6 +728,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
                 }
               )}
               scrollEventThrottle={16}
+              onContentSizeChange={(_, height) => {
+                contentHeightRef.current = height;
+                updateScrollability();
+              }}
+              onLayout={(e) => {
+                layoutHeightRef.current = e.nativeEvent.layout.height;
+                updateScrollability();
+              }}
             />
           </>
         )}
