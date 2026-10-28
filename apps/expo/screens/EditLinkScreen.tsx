@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Share,
+  Platform,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -23,6 +24,7 @@ import { updateLink } from "../services/storage";
 import { LinkData } from "../types/link";
 import { SafeAreaWrapper } from "../components/SafeAreaWrapper";
 import { FolderSelector } from "../components/FolderSelector";
+import { Theme, radius, useThemedStyles } from "../utils/theme";
 
 /**
  * Navigation param types
@@ -46,6 +48,7 @@ export const EditLinkScreen: React.FC = () => {
   const navigation = useNavigation<EditLinkScreenNavigationProp>();
   const route = useRoute<EditLinkScreenRouteProp>();
   const { linkData } = route.params;
+  const { theme, styles } = useThemedStyles(createStyles);
 
   const descriptionInputRef = useRef<TextInput | null>(null);
   const imageInputRef = useRef<TextInput | null>(null);
@@ -119,25 +122,28 @@ export const EditLinkScreen: React.FC = () => {
       headerRight: () => (
         <View style={styles.headerButtonContainer}>
           {saving ? (
-            <ActivityIndicator size="small" color="#0066cc" />
+            <ActivityIndicator size="small" color={theme.primary} />
           ) : (
-            <Text style={styles.saveButton} onPress={handleSave}>
-              Save
-            </Text>
+            <TouchableOpacity
+              onPress={handleSave}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.saveButton}>Save</Text>
+            </TouchableOpacity>
           )}
         </View>
       ),
     });
-  }, [navigation, title, description, image, tag, folderId, saving]);
+  }, [navigation, title, description, image, tag, folderId, saving, styles]);
 
   return (
-    <SafeAreaWrapper style={styles.safeArea}>
+    <SafeAreaWrapper edges={["bottom", "left", "right"]}>
       <KeyboardAwareScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
         enableOnAndroid
         keyboardShouldPersistTaps="handled"
-        extraScrollHeight={200}
+        extraScrollHeight={80}
       >
         {/* URL Field (Read-only) */}
         <View style={styles.fieldContainer}>
@@ -148,6 +154,7 @@ export const EditLinkScreen: React.FC = () => {
             editable={false}
             selectTextOnFocus={false}
             placeholder="URL"
+            multiline
           />
           <Text style={styles.helpText}>URL cannot be modified</Text>
         </View>
@@ -160,6 +167,7 @@ export const EditLinkScreen: React.FC = () => {
             value={title}
             onChangeText={setTitle}
             placeholder="Enter title"
+            placeholderTextColor={theme.textSubtle}
             autoCapitalize="sentences"
             autoCorrect={true}
             returnKeyType="next"
@@ -178,6 +186,7 @@ export const EditLinkScreen: React.FC = () => {
             value={description}
             onChangeText={setDescription}
             placeholder="Enter description"
+            placeholderTextColor={theme.textSubtle}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
@@ -200,6 +209,7 @@ export const EditLinkScreen: React.FC = () => {
             value={image}
             onChangeText={setImage}
             placeholder="Enter image URL"
+            placeholderTextColor={theme.textSubtle}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
@@ -219,6 +229,7 @@ export const EditLinkScreen: React.FC = () => {
             value={tag}
             onChangeText={setTag}
             placeholder="Enter tag (e.g., shopping, news, social)"
+            placeholderTextColor={theme.textSubtle}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
@@ -242,7 +253,7 @@ export const EditLinkScreen: React.FC = () => {
             onPress={handleShare}
             activeOpacity={0.7}
           >
-            <Text style={styles.shareButtonText}>SHARE</Text>
+            <Text style={styles.shareButtonText}>Share link</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
@@ -253,70 +264,72 @@ export const EditLinkScreen: React.FC = () => {
 /**
  * Styles for the EditLinkScreen component
  */
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-  },
-  content: {
-    paddingHorizontal: 16,
-    marginBottom: 200,
-  },
-  fieldContainer: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000000",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#cccccc",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: "#000000",
-    backgroundColor: "#ffffff",
-  },
-  inputDisabled: {
-    backgroundColor: "#f5f5f5",
-    color: "#666666",
-  },
-  textArea: {
-    minHeight: 100,
-    paddingTop: 12,
-  },
-  helpText: {
-    fontSize: 12,
-    color: "#999999",
-    marginTop: 4,
-  },
-  headerButtonContainer: {
-    marginRight: 16,
-  },
-  saveButton: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0066cc",
-  },
-  shareButton: {
-    backgroundColor: "#0066cc",
-    borderRadius: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-  },
-  shareButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    content: {
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 40,
+    },
+    fieldContainer: {
+      marginBottom: 18,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.textMuted,
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+    },
+    input: {
+      borderRadius: radius.md,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: theme.text,
+      backgroundColor: theme.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border,
+    },
+    inputDisabled: {
+      backgroundColor: theme.inputBg,
+      color: theme.textMuted,
+      fontSize: 14,
+    },
+    textArea: {
+      minHeight: 100,
+      paddingTop: 12,
+    },
+    helpText: {
+      fontSize: 12,
+      color: theme.textSubtle,
+      marginTop: 4,
+    },
+    headerButtonContainer: {
+      marginRight: Platform.OS === "android" ? 0 : 4,
+    },
+    saveButton: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.primary,
+    },
+    shareButton: {
+      backgroundColor: theme.primarySoft,
+      borderRadius: radius.md,
+      height: 50,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 8,
+    },
+    shareButtonText: {
+      color: theme.primary,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+  });
+}

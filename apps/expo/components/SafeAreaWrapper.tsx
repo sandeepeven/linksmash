@@ -11,12 +11,15 @@ import {
   SafeAreaView,
   SafeAreaViewProps,
 } from "react-native-safe-area-context";
+import { useTheme } from "../utils/theme";
 
 /**
  * Props for the SafeAreaWrapper component
  *
  * @property children - React children to render inside the safe area
  * @property style - Optional style override for the container
+ * @property edges - Safe-area edges to pad. Screens with a native header should
+ *                   omit "top" (the header already handles it).
  */
 interface SafeAreaWrapperProps extends SafeAreaViewProps {
   children: React.ReactNode;
@@ -38,9 +41,10 @@ export const SafeAreaWrapper: React.FC<SafeAreaWrapperProps> = ({
   style,
   ...rest
 }) => {
+  const theme = useTheme();
   return (
     <SafeAreaView
-      style={[styles.container, style]}
+      style={[styles.container, { backgroundColor: theme.background }, style]}
       edges={["top", "bottom", "left", "right"]}
       {...rest}
     >
@@ -55,7 +59,6 @@ export const SafeAreaWrapper: React.FC<SafeAreaWrapperProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
   },
 });
 

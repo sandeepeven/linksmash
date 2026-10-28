@@ -13,11 +13,10 @@ import {
   StyleSheet,
   Modal,
   FlatList,
-  useColorScheme,
 } from "react-native";
 import { Folder } from "../types/folder";
 import { getFolders } from "../services/folderStorage";
-import { createTheme } from "../utils/theme";
+import { Theme, radius, useThemedStyles } from "../utils/theme";
 
 /**
  * Props for the FolderSelector component
@@ -41,10 +40,7 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
   selectedFolderId,
   onSelect,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
-  const theme = createTheme(isDarkMode);
-  const styles = createStyles(theme);
+  const { styles } = useThemedStyles(createStyles);
 
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -151,8 +147,9 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
 
       <Modal
         visible={modalVisible}
-        animationType="slide"
+        animationType="fade"
         transparent={true}
+        statusBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
@@ -189,17 +186,16 @@ export const FolderSelector: React.FC<FolderSelectorProps> = ({
 /**
  * Styles for the FolderSelector component
  */
-function createStyles(theme: ReturnType<typeof createTheme>) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     selectorButton: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      padding: 12,
-      backgroundColor: theme.background,
+      borderRadius: radius.md,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: theme.inputBg,
     },
     selectorButtonText: {
       fontSize: 16,
@@ -211,13 +207,13 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
     },
     modalOverlay: {
       flex: 1,
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      backgroundColor: theme.backdrop,
       justifyContent: "flex-end",
     },
     modalContainer: {
       backgroundColor: theme.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
       maxHeight: "70%",
       minHeight: "50%",
     },
@@ -267,11 +263,11 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
     },
     optionTextSelected: {
       fontWeight: "600",
-      color: "#0066cc",
+      color: theme.primary,
     },
     checkmarkIcon: {
       fontSize: 18,
-      color: "#0066cc",
+      color: theme.primary,
       fontWeight: "bold",
     },
     emptyContainer: {

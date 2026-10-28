@@ -19,6 +19,27 @@ const STORAGE_KEY = "linksmash_links";
 const ALLOW_EDITING_BEFORE_SAVE_KEY = "linksmash_allow_editing_before_save";
 
 /**
+ * Serializes read-modify-write operations on the links array.
+ * Without this, concurrent writers (e.g. several cards saving fetched metadata
+ * while a new share is being saved) read the same snapshot and the last write
+ * silently drops the others' changes.
+ */
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function withWriteLock<T>(task: () => Promise<T>): Promise<T> {
+  const run = writeQueue.then(task, task);
+  writeQueue = run.catch(() => undefined);
+  return run;
+}
+
+/**
+ * Normalizes a URL for duplicate detection
+ */
+export function normalizeUrl(url: string): string {
+  return url.toLowerCase().trim();
+}
+
+/**
  * Saves a link object with metadata to AsyncStorage
  *
  * @param linkData - The link data object to save
@@ -26,6 +47,10 @@ const ALLOW_EDITING_BEFORE_SAVE_KEY = "linksmash_allow_editing_before_save";
  * @throws Error if storage operation fails
  */
 export async function saveLink(linkData: LinkData): Promise<void> {
+  return withWriteLock(() => saveLinkUnlocked(linkData));
+}
+
+async function saveLinkUnlocked(linkData: LinkData): Promise<void> {
   try {
     // Validate link data
     if (!linkData || !linkData.url) {
@@ -60,8 +85,30 @@ export async function saveLink(linkData: LinkData): Promise<void> {
       }
     }
 
-    // Add the new link to the array
-    existingLinks.push(linkData);
+    // Upsert: re-sharing a saved URL bumps it instead of storing a duplicate.
+    // Keep the user's folder and any already-fetched metadata.
+    const key = normalizeUrl(linkData.url);
+    const previous = existingLinks.find(
+      (link) => normalizeUrl(link.url) === key
+    );
+    existingLinks = existingLinks.filter(
+      (link) => normalizeUrl(link.url) !== key
+    );
+    if (previous && previous.metadataFetched && !linkData.metadataFetched) {
+      existingLinks.push({
+        ...previous,
+        createdAt: linkData.createdAt,
+        folderId: linkData.folderId ?? previous.folderId ?? null,
+        sharedImages: linkData.sharedImages.length
+          ? linkData.sharedImages
+          : previous.sharedImages,
+      });
+    } else {
+      existingLinks.push({
+        ...linkData,
+        folderId: linkData.folderId ?? previous?.folderId ?? null,
+      });
+    }
 
     // Save the updated array back to storage
     const serializedData = JSON.stringify(existingLinks);
@@ -139,21 +186,25 @@ export async function getLinks(): Promise<LinkData[]> {
  * @throws Error if storage operation fails or URL is not found
  */
 export async function deleteLink(url: string): Promise<void> {
+  return withWriteLock(() => deleteLinkUnlocked(url));
+}
+
+async function deleteLinkUnlocked(url: string): Promise<void> {
   try {
     const existingLinks = await getLinks();
 
-    // Find the index of the link with the matching URL
-    const index = existingLinks.findIndex((link) => link.url === url);
+    // Remove every entry for this URL (older versions stored duplicates)
+    const key = normalizeUrl(url);
+    const remainingLinks = existingLinks.filter(
+      (link) => normalizeUrl(link.url) !== key
+    );
 
-    if (index === -1) {
+    if (remainingLinks.length === existingLinks.length) {
       throw new Error("Link not found");
     }
 
-    // Remove the link at the found index
-    existingLinks.splice(index, 1);
-
     // Save the updated array back to storage
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(existingLinks));
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(remainingLinks));
   } catch (error) {
     console.error("Error deleting link from storage:", error);
     if (error instanceof Error) {
@@ -173,6 +224,13 @@ export async function deleteLink(url: string): Promise<void> {
  * @throws Error if storage operation fails or URL is not found
  */
 export async function updateLink(
+  url: string,
+  updatedLinkData: Partial<LinkData>
+): Promise<void> {
+  return withWriteLock(() => updateLinkUnlocked(url, updatedLinkData));
+}
+
+async function updateLinkUnlocked(
   url: string,
   updatedLinkData: Partial<LinkData>
 ): Promise<void> {

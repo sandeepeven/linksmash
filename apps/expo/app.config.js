@@ -24,14 +24,25 @@ module.exports = {
   expo: {
     name: "LinkSmash",
     slug: "LinkSmash",
-    version: "1.0.10",
+    version: "1.1.2",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    // Deep-link scheme, required by expo-share-intent
+    scheme: "linksmash",
     plugins: [
-      "./plugins/withMainActivityOnNewIntent",
-      "./plugins/withFixedIntentFilters",
+      [
+        "expo-share-intent",
+        {
+          // Text + URLs, plus a single image (e.g. product screenshots)
+          androidIntentFilters: ["text/*", "image/*"],
+          androidMultiIntentFilters: ["image/*"],
+          // iOS share extension needs an App Group + the xcode patch-package
+          // patch (see expo-share-intent README). Enable once that is set up.
+          disableIOS: true,
+        },
+      ],
     ],
     splash: {
       image: "./assets/splash-icon.png",
@@ -49,24 +60,6 @@ module.exports = {
       },
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
-      intentFilters: [
-        {
-          action: "android.intent.action.SEND",
-          category: ["android.intent.category.DEFAULT"],
-          data: [
-            { mimeType: "text/plain" },
-            { mimeType: "text/html" },
-            { mimeType: "image/*" },
-            { mimeType: "video/*" },
-          ],
-        },
-        {
-          action: "android.intent.action.SEND_MULTIPLE",
-          category: ["android.intent.category.DEFAULT"],
-          data: [{ mimeType: "image/*" }, { mimeType: "video/*" }],
-        },
-      ],
-      launchMode: "singleTop",
       package: "com.x0089.LinkSmash",
     },
     web: {

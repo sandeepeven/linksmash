@@ -15,13 +15,12 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  useColorScheme,
   Modal,
   Pressable,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
+import { Swipeable } from "react-native-gesture-handler";
 import DraggableFlatList, {
   ScaleDecorator,
   RenderItemParams,
@@ -34,7 +33,7 @@ import {
   reorderFolders,
 } from "../services/folderStorage";
 import { Folder } from "../types/folder";
-import { createTheme } from "../utils/theme";
+import { Theme, radius, useThemedStyles } from "../utils/theme";
 
 /**
  * Navigation param types
@@ -59,10 +58,7 @@ const DRAG_HANDLE_ICON = "≡";
  */
 export const FoldersScreen: React.FC = () => {
   const navigation = useNavigation<FoldersScreenNavigationProp>();
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
-  const theme = createTheme(isDarkMode);
-  const styles = createStyles(theme);
+  const { theme, styles } = useThemedStyles(createStyles);
 
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -76,11 +72,11 @@ export const FoldersScreen: React.FC = () => {
   const swipeableRefs = useRef<Record<string, Swipeable | null>>({});
 
   /**
-   * Loads all folders from storage
+   * Loads all folders from storage.
+   * Only the first load shows the spinner; refocus refreshes in place.
    */
   const loadFolders = useCallback(async () => {
     try {
-      setLoading(true);
       const allFolders = await getFolders();
       setFolders(allFolders);
     } catch (error) {
@@ -361,12 +357,11 @@ export const FoldersScreen: React.FC = () => {
   );
 
   return (
-    <SafeAreaWrapper style={styles.safeArea}>
-      <GestureHandlerRootView style={styles.container}>
+    <SafeAreaWrapper edges={["bottom", "left", "right"]}>
+      <View style={styles.container}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0066cc" />
-            <Text style={styles.loadingText}>Loading folders...</Text>
+            <ActivityIndicator size="large" color={theme.primary} />
           </View>
         ) : (
           <>
@@ -398,6 +393,7 @@ export const FoldersScreen: React.FC = () => {
                       value={newFolderName}
                       onChangeText={setNewFolderName}
                       autoFocus
+                      returnKeyType="done"
                       onSubmitEditing={handleCreateFolder}
                       editable={!creating}
                     />
@@ -421,7 +417,7 @@ export const FoldersScreen: React.FC = () => {
                         disabled={creating || !newFolderName.trim()}
                       >
                         {creating ? (
-                          <ActivityIndicator size="small" color="#ffffff" />
+                          <ActivityIndicator size="small" color={theme.onPrimary} />
                         ) : (
                           <Text style={styles.createButtonText}>Create</Text>
                         )}
@@ -480,6 +476,7 @@ export const FoldersScreen: React.FC = () => {
           transparent
           onRequestClose={handleCloseEditFolder}
           animationType="fade"
+          statusBarTranslucent
         >
           <Pressable
             style={styles.editModalOverlay}
@@ -489,12 +486,15 @@ export const FoldersScreen: React.FC = () => {
               style={styles.editModalCard}
               onPress={(e) => e.stopPropagation()}
             >
+              <Text style={styles.editModalTitle}>Rename folder</Text>
               <TextInput
                 style={styles.editModalInput}
                 placeholder="Folder name"
                 placeholderTextColor={theme.textMuted}
                 value={editFolderName}
                 onChangeText={setEditFolderName}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveEditFolder}
                 autoFocus
                 editable={!!folderToEdit}
               />
@@ -533,7 +533,7 @@ export const FoldersScreen: React.FC = () => {
             </Pressable>
           </Pressable>
         </Modal>
-      </GestureHandlerRootView>
+      </View>
     </SafeAreaWrapper>
   );
 };
@@ -541,12 +541,8 @@ export const FoldersScreen: React.FC = () => {
 /**
  * Styles for the FoldersScreen component
  */
-function createStyles(theme: ReturnType<typeof createTheme>) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
     container: {
       flex: 1,
       backgroundColor: theme.background,
@@ -555,11 +551,6 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-    },
-    loadingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: theme.textMuted,
     },
     reorderHeader: {
       flexDirection: "row",
@@ -588,7 +579,7 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: "#0066cc",
+      backgroundColor: theme.primary,
       justifyContent: "center",
       alignItems: "center",
     },
@@ -598,19 +589,18 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       fontWeight: "bold",
     },
     createInputContainer: {
-      padding: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
+      margin: 16,
+      marginBottom: 8,
+      padding: 12,
+      borderRadius: radius.md,
       backgroundColor: theme.surface,
     },
     createInput: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
+      borderRadius: radius.sm,
       padding: 12,
       fontSize: 16,
       color: theme.text,
-      backgroundColor: theme.background,
+      backgroundColor: theme.inputBg,
       marginBottom: 12,
     },
     createButtonContainer: {
@@ -627,7 +617,7 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       color: theme.textMuted,
     },
     createButton: {
-      backgroundColor: "#0066cc",
+      backgroundColor: theme.primary,
       borderRadius: 8,
       paddingVertical: 8,
       paddingHorizontal: 16,
@@ -641,23 +631,22 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       fontWeight: "600",
     },
     addFolderButton: {
-      marginTop: -4,
+      marginTop: 12,
       marginHorizontal: 16,
-      marginBottom: 16,
-      padding: 16,
-      backgroundColor: theme.surface,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.border,
+      marginBottom: 8,
+      height: 48,
+      justifyContent: "center",
+      backgroundColor: theme.primarySoft,
+      borderRadius: radius.md,
       alignItems: "center",
     },
     addFolderButtonText: {
       fontSize: 16,
-      color: "#0066cc",
+      color: theme.primary,
       fontWeight: "600",
     },
     listContainer: {
-      paddingTop: 8,
+      paddingTop: 4,
       paddingBottom: 80,
     },
     emptyListContainer: {
@@ -687,14 +676,24 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
     folderItem: {
       flexDirection: "row",
       alignItems: "center",
-      padding: 16,
-      backgroundColor: theme.surface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginHorizontal: 16,
+      marginVertical: 5,
+      borderRadius: radius.md,
+      backgroundColor: theme.card,
+      borderWidth: theme.isDark ? StyleSheet.hairlineWidth : 0,
+      borderColor: theme.border,
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: theme.isDark ? 0 : 0.05,
+      shadowRadius: 6,
+      elevation: theme.isDark ? 0 : 1,
     },
     folderItemActive: {
-      opacity: 0.9,
-      backgroundColor: theme.background,
+      opacity: 0.95,
+      shadowOpacity: 0.2,
+      elevation: 8,
     },
     dragHandle: {
       width: 44,
@@ -713,7 +712,7 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       marginRight: 16,
     },
     folderIcon: {
-      fontSize: 32,
+      fontSize: 28,
     },
     folderContent: {
       flex: 1,
@@ -750,7 +749,7 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
     },
     checkmarkIcon: {
       fontSize: 18,
-      color: "#0066cc",
+      color: theme.primary,
       fontWeight: "bold",
     },
     swipeDeleteContainer: {
@@ -758,9 +757,9 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       justifyContent: "center",
       alignItems: "flex-end",
       paddingHorizontal: 20,
-      marginVertical: 6,
+      marginVertical: 5,
       marginHorizontal: 16,
-      borderRadius: 8,
+      borderRadius: radius.md,
       overflow: "hidden",
     },
     swipeDeleteButton: {
@@ -774,13 +773,13 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       fontSize: 16,
     },
     swipeEditContainer: {
-      backgroundColor: "#0066cc",
+      backgroundColor: theme.primary,
       justifyContent: "center",
       alignItems: "flex-start",
       paddingHorizontal: 20,
-      marginVertical: 6,
+      marginVertical: 5,
       marginHorizontal: 16,
-      borderRadius: 8,
+      borderRadius: radius.md,
       overflow: "hidden",
     },
     swipeEditButton: {
@@ -802,18 +801,23 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
     },
     editModalCard: {
       width: "100%",
-      backgroundColor: "#ffffff",
-      borderRadius: 8,
+      maxWidth: 420,
+      backgroundColor: theme.surface,
+      borderRadius: radius.lg,
       padding: 20,
     },
+    editModalTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.text,
+      marginBottom: 12,
+    },
     editModalInput: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
+      borderRadius: radius.sm,
       padding: 12,
       fontSize: 16,
       color: theme.text,
-      backgroundColor: theme.background,
+      backgroundColor: theme.inputBg,
       marginBottom: 16,
     },
     editModalButtonRow: {
@@ -830,7 +834,7 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       color: theme.textMuted,
     },
     editModalSaveButton: {
-      backgroundColor: "#0066cc",
+      backgroundColor: theme.primary,
       borderRadius: 8,
       paddingVertical: 8,
       paddingHorizontal: 16,

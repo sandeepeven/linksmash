@@ -20,18 +20,21 @@
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
-      <intent-filter data-generated="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="linksmash"/>
+      </intent-filter>
+      <intent-filter>
         <action android:name="android.intent.action.SEND"/>
-        <data android:mimeType="text/plain"/>
-        <data android:mimeType="text/html"/>
+        <data android:mimeType="text/*"/>
         <data android:mimeType="image/*"/>
-        <data android:mimeType="video/*"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
-      <intent-filter data-generated="true">
+      <intent-filter>
         <action android:name="android.intent.action.SEND_MULTIPLE"/>
         <data android:mimeType="image/*"/>
-        <data android:mimeType="video/*"/>
         <category android:name="android.intent.category.DEFAULT"/>
       </intent-filter>
     </activity>

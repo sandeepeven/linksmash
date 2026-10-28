@@ -11,7 +11,6 @@ import {
   Text,
   StyleSheet,
   Switch,
-  useColorScheme,
   Linking,
   TouchableOpacity,
 } from "react-native";
@@ -21,13 +20,13 @@ import {
   setAllowEditingBeforeSave,
 } from "../services/storage";
 import { SafeAreaWrapper } from "../components/SafeAreaWrapper";
+import { Theme, radius, useThemedStyles } from "../utils/theme";
 
 /**
  * SettingsScreen component for managing app settings
  */
 export const SettingsScreen: React.FC = () => {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
+  const { theme, styles } = useThemedStyles(createStyles);
   const [allowEditing, setAllowEditing] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -68,33 +67,23 @@ export const SettingsScreen: React.FC = () => {
     }, [loadSetting])
   );
 
-  const theme = {
-    background: isDarkMode ? "#0b0b0c" : "#ffffff",
-    surface: isDarkMode ? "#161718" : "#ffffff",
-    text: isDarkMode ? "#f2f4f7" : "#000000",
-    textMuted: isDarkMode ? "#c7c9ce" : "#666666",
-    border: isDarkMode ? "#2a2c2f" : "#e0e0e0",
-  };
-
-  const styles = createStyles(theme);
-
   return (
-    <SafeAreaWrapper style={styles.safeArea}>
+    <SafeAreaWrapper edges={["bottom", "left", "right"]}>
       <View style={styles.container}>
+        <Text style={styles.sectionTitle}>Saving</Text>
         <View style={styles.settingRow}>
           <View style={styles.settingContent}>
             <Text style={styles.settingLabel}>Allow editing before save</Text>
             <Text style={styles.settingDescription}>
-              When enabled, a modal will appear when sharing a link, allowing you
-              to edit details before saving. When disabled, links are saved
-              immediately.
+              Review the title, tag and folder before a shared link is saved.
+              When off, links are saved instantly.
             </Text>
           </View>
           <Switch
             value={allowEditing}
             onValueChange={handleToggleChange}
             disabled={loading}
-            trackColor={{ false: theme.border, true: "#0066cc" }}
+            trackColor={{ false: theme.border, true: theme.primary }}
             thumbColor={allowEditing ? "#ffffff" : "#f4f3f4"}
             ios_backgroundColor={theme.border}
           />
@@ -121,31 +110,32 @@ export const SettingsScreen: React.FC = () => {
 /**
  * Styles for the SettingsScreen component
  */
-function createStyles(theme: {
-  background: string;
-  surface: string;
-  text: string;
-  textMuted: string;
-  border: string;
-}) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
     container: {
       flex: 1,
       backgroundColor: theme.background,
       paddingHorizontal: 16,
-      paddingTop: 16,
+      paddingTop: 20,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.textMuted,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
+      marginBottom: 8,
+      marginLeft: 4,
     },
     settingRow: {
       flexDirection: "row",
-      alignItems: "flex-start",
+      alignItems: "center",
       justifyContent: "space-between",
-      paddingVertical: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
+      padding: 16,
+      borderRadius: radius.md,
+      backgroundColor: theme.surface,
+      borderWidth: theme.isDark ? StyleSheet.hairlineWidth : 0,
+      borderColor: theme.border,
     },
     settingContent: {
       flex: 1,
@@ -155,12 +145,12 @@ function createStyles(theme: {
       fontSize: 16,
       fontWeight: "600",
       color: theme.text,
-      marginBottom: 8,
+      marginBottom: 4,
     },
     settingDescription: {
-      fontSize: 14,
+      fontSize: 13,
       color: theme.textMuted,
-      lineHeight: 20,
+      lineHeight: 18,
     },
     aboutSpacer: {
       flex: 1,
@@ -170,16 +160,15 @@ function createStyles(theme: {
       alignItems: "center",
     },
     aboutText: {
-      fontSize: 16,
-      color: theme.textMuted,
+      fontSize: 13,
+      color: theme.textSubtle,
       marginBottom: 4,
     },
     aboutLink: {
-      fontSize: 16,
-      color: theme.textMuted,
+      fontSize: 13,
+      color: theme.primary,
       marginTop: 4,
-      textDecorationLine: "underline",
+      fontWeight: "600",
     },
   });
 }
-

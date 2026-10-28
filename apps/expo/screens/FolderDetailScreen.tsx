@@ -14,22 +14,21 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  useColorScheme,
   Share,
+  Platform,
+  ListRenderItem,
 } from "react-native";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import {
-  GestureHandlerRootView,
-  Swipeable,
-} from "react-native-gesture-handler";
 import { SafeAreaWrapper } from "../components/SafeAreaWrapper";
-import { LinkCard } from "../components/LinkCard";
-import { getLinks, deleteLink } from "../services/storage";
+import { LINK_ROW_HEIGHT } from "../components/LinkCard";
+import { SwipeableLinkRow } from "../components/SwipeableLinkRow";
+import { useToast } from "../components/Toast";
+import { getLinks, deleteLink, saveLink } from "../services/storage";
 import { getFolder, getFolders } from "../services/folderStorage";
 import { LinkData } from "../types/link";
 import { Folder } from "../types/folder";
-import { createTheme } from "../utils/theme";
+import { Theme, radius, useThemedStyles } from "../utils/theme";
 
 /**
  * Navigation param types
@@ -49,6 +48,14 @@ type FolderDetailScreenNavigationProp = NativeStackNavigationProp<
   "FolderDetail"
 >;
 
+const getItemLayout = (_: unknown, index: number) => ({
+  length: LINK_ROW_HEIGHT,
+  offset: LINK_ROW_HEIGHT * index,
+  index,
+});
+
+const keyExtractor = (item: LinkData) => item.url;
+
 /**
  * Gets display name for a folder, handling untitled folders
  *
@@ -67,11 +74,11 @@ function getFolderDisplayName(folder: Folder, allFolders: Folder[]): string {
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const index = untitledFolders.findIndex((f) => f.id === folder.id);
-  
+
   if (index === 0) {
     return "Untitled Folder";
   }
-  
+
   return `Untitled Folder ${index + 1}`;
 }
 
@@ -83,10 +90,8 @@ export const FolderDetailScreen: React.FC = () => {
   const route = useRoute<FolderDetailScreenRouteProp>();
   const { folderId } = route.params;
 
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
-  const theme = createTheme(isDarkMode);
-  const styles = createStyles(theme);
+  const { theme, styles } = useThemedStyles(createStyles);
+  const toast = useToast();
 
   const [links, setLinks] = useState<LinkData[]>([]);
   const [folder, setFolder] = useState<Folder | null>(null);
@@ -97,39 +102,35 @@ export const FolderDetailScreen: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Loads folder and links data
+   * Loads folder and links data.
+   * Only the first load shows the spinner; refocus refreshes in place.
    */
   const loadData = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
 
-      // Load folder and all folders for display name calculation
-      const [folderData, allFoldersData] = await Promise.all([
+      // Load folder, all folders (for display name) and links in parallel
+      const [folderData, allFoldersData, allLinks] = await Promise.all([
         getFolder(folderId),
         getFolders(),
+        getLinks(),
       ]);
 
       if (!folderData) {
         setError("Folder not found");
-        setLoading(false);
         return;
       }
 
       setFolder(folderData);
       setAllFolders(allFoldersData);
 
-      // Load all links and filter by folderId
-      const allLinks = await getLinks();
-      const folderLinks = allLinks.filter(
-        (link) => link.folderId === folderId
-      );
-
-      // Sort by creation date (newest first)
-      const sortedLinks = folderLinks.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      // Filter by folderId and sort by creation date (newest first)
+      const sortedLinks = allLinks
+        .filter((link) => link.folderId === folderId)
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
 
       setLinks(sortedLinks);
     } catch (error) {
@@ -210,39 +211,94 @@ export const FolderDetailScreen: React.FC = () => {
     return map;
   }, [allFolders]);
 
+  const handleDeleteLink = useCallback(
+    async (link: LinkData) => {
+      setLinks((current) => current.filter((l) => l.url !== link.url));
+      try {
+        await deleteLink(link.url);
+        toast.show("Link deleted", {
+          actionLabel: "Undo",
+          onAction: async () => {
+            try {
+              await saveLink(link);
+            } finally {
+              loadData();
+            }
+          },
+        });
+      } catch (e) {
+        console.error("Failed to delete link:", e);
+        toast.show("Failed to delete link");
+        loadData();
+      }
+    },
+    [loadData, toast]
+  );
+
+  const handleShareLink = useCallback(
+    async (link: LinkData) => {
+      try {
+        await Share.share({ message: link.url });
+      } catch (e) {
+        console.error("Failed to share link:", e);
+        toast.show("Failed to share link");
+      }
+    },
+    [toast]
+  );
+
+  const handleMetadataFetched = useCallback(
+    (url: string, patch: Partial<LinkData>) => {
+      setLinks((current) =>
+        current.map((link) => (link.url === url ? { ...link, ...patch } : link))
+      );
+    },
+    []
+  );
+
+  const renderItem: ListRenderItem<LinkData> = useCallback(
+    ({ item }) => (
+      <SwipeableLinkRow
+        linkData={item}
+        folderName={item.folderId ? folderMap.get(item.folderId) || null : null}
+        onDelete={handleDeleteLink}
+        onShare={handleShareLink}
+        onMetadataFetched={handleMetadataFetched}
+      />
+    ),
+    [folderMap, handleDeleteLink, handleShareLink, handleMetadataFetched]
+  );
+
   /**
    * Renders empty state
    */
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>No links in this folder</Text>
-      <Text style={styles.emptySubtext}>
-        Links assigned to this folder will appear here
+      <Text style={styles.emptyIcon}>{searchQuery.trim() ? "🔍" : "📂"}</Text>
+      <Text style={styles.emptyText}>
+        {searchQuery.trim() ? "No matching links" : "No links in this folder"}
       </Text>
-    </View>
-  );
-
-  /**
-   * Renders loading state
-   */
-  const renderLoading = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#0066cc" />
-      <Text style={styles.loadingText}>Loading links...</Text>
+      <Text style={styles.emptySubtext}>
+        {searchQuery.trim()
+          ? "Try a different search"
+          : "Long-press a link and pick this folder to add it here"}
+      </Text>
     </View>
   );
 
   if (loading) {
     return (
-      <SafeAreaWrapper style={styles.safeArea}>
-        {renderLoading()}
+      <SafeAreaWrapper edges={["bottom", "left", "right"]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
       </SafeAreaWrapper>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaWrapper style={styles.safeArea}>
+      <SafeAreaWrapper edges={["bottom", "left", "right"]}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
         </View>
@@ -251,92 +307,55 @@ export const FolderDetailScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaWrapper style={styles.safeArea}>
-      <GestureHandlerRootView style={styles.container}>
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
+    <SafeAreaWrapper edges={["bottom", "left", "right"]}>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchField}>
+          <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search links..."
-            placeholderTextColor={theme.textMuted}
+            placeholder="Search in folder"
+            placeholderTextColor={theme.textSubtle}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCapitalize="none"
             autoCorrect={false}
+            returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
               style={styles.clearButton}
               onPress={() => setSearchQuery("")}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               activeOpacity={0.7}
             >
               <Text style={styles.clearButtonText}>✕</Text>
             </TouchableOpacity>
           )}
         </View>
+      </View>
 
-        {/* Links List */}
-        <FlatList
-          data={filteredLinks}
-          keyExtractor={(item, index) => `${item.url}-${index}`}
-          renderItem={({ item, index }) => (
-            <Swipeable
-              renderRightActions={() => (
-                <View style={styles.swipeDeleteContainer}>
-                  <Text
-                    style={styles.swipeDeleteText}
-                    onPress={async () => {
-                      try {
-                        await deleteLink(item.url);
-                        await loadData();
-                      } catch (e) {
-                        console.error("Failed to delete link:", e);
-                        setError("Failed to delete link");
-                      }
-                    }}
-                  >
-                    Delete
-                  </Text>
-                </View>
-              )}
-              renderLeftActions={() => (
-                <View style={styles.swipeShareContainer}>
-                  <Text
-                    style={styles.swipeShareText}
-                    onPress={async () => {
-                      try {
-                        await Share.share({
-                          message: item.url,
-                        });
-                      } catch (e) {
-                        console.error("Failed to share link:", e);
-                        setError("Failed to share link");
-                      }
-                    }}
-                  >
-                    Share
-                  </Text>
-                </View>
-              )}
-            >
-              <LinkCard
-                linkData={item}
-                index={index}
-                folderName={item.folderId ? folderMap.get(item.folderId) || null : null}
-              />
-            </Swipeable>
-          )}
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={
-            filteredLinks.length === 0
-              ? styles.emptyListContainer
-              : { paddingTop: 12, paddingBottom: 20 }
-          }
-          showsVerticalScrollIndicator={true}
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-        />
-      </GestureHandlerRootView>
+      {/* Links List */}
+      <FlatList
+        data={filteredLinks}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        windowSize={11}
+        removeClippedSubviews={Platform.OS === "android"}
+        ListEmptyComponent={renderEmptyState}
+        contentContainerStyle={
+          filteredLinks.length === 0
+            ? styles.emptyListContainer
+            : { paddingTop: 4, paddingBottom: 24 }
+        }
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+      />
     </SafeAreaWrapper>
   );
 };
@@ -344,44 +363,45 @@ export const FolderDetailScreen: React.FC = () => {
 /**
  * Styles for the FolderDetailScreen component
  */
-function createStyles(theme: ReturnType<typeof createTheme>) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
     searchContainer: {
-      flexDirection: "row",
-      alignItems: "center",
       paddingHorizontal: 16,
       paddingVertical: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
-      backgroundColor: theme.surface,
+    },
+    searchField: {
+      flexDirection: "row",
+      alignItems: "center",
+      height: 42,
+      borderRadius: radius.md,
+      backgroundColor: theme.inputBg,
+      paddingHorizontal: 12,
+    },
+    searchIcon: {
+      fontSize: 18,
+      color: theme.textSubtle,
+      marginRight: 6,
     },
     searchInput: {
       flex: 1,
-      height: 40,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      paddingHorizontal: 12,
+      height: "100%",
       fontSize: 16,
       color: theme.text,
-      backgroundColor: theme.background,
+      paddingVertical: 0,
     },
     clearButton: {
       marginLeft: 8,
-      padding: 8,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: theme.textSubtle,
+      justifyContent: "center",
+      alignItems: "center",
     },
     clearButtonText: {
-      fontSize: 18,
-      color: theme.textMuted,
-      fontWeight: "300",
+      fontSize: 11,
+      color: theme.inputBg,
+      fontWeight: "700",
     },
     emptyListContainer: {
       flexGrow: 1,
@@ -390,16 +410,21 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      paddingHorizontal: 32,
+      paddingHorizontal: 40,
+    },
+    emptyIcon: {
+      fontSize: 48,
+      marginBottom: 12,
     },
     emptyText: {
       fontSize: 20,
-      fontWeight: "bold",
+      fontWeight: "700",
       color: theme.text,
       marginBottom: 8,
     },
     emptySubtext: {
       fontSize: 14,
+      lineHeight: 20,
       color: theme.textMuted,
       textAlign: "center",
     },
@@ -407,11 +432,6 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-    },
-    loadingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: theme.textMuted,
     },
     errorContainer: {
       flex: 1,
@@ -421,39 +441,8 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
     },
     errorText: {
       fontSize: 16,
-      color: theme.errorBg,
+      color: theme.danger,
       textAlign: "center",
-    },
-    swipeDeleteContainer: {
-      backgroundColor: theme.errorBg,
-      justifyContent: "center",
-      alignItems: "flex-end",
-      paddingHorizontal: 20,
-      marginVertical: 6,
-      marginHorizontal: 16,
-      borderRadius: 8,
-      overflow: "hidden",
-    },
-    swipeDeleteText: {
-      color: "#ffffff",
-      fontWeight: "700",
-      fontSize: 16,
-    },
-    swipeShareContainer: {
-      backgroundColor: "#0066cc",
-      justifyContent: "center",
-      alignItems: "flex-start",
-      paddingHorizontal: 20,
-      marginVertical: 6,
-      marginHorizontal: 16,
-      borderRadius: 8,
-      overflow: "hidden",
-    },
-    swipeShareText: {
-      color: "#ffffff",
-      fontWeight: "700",
-      fontSize: 16,
     },
   });
 }
-

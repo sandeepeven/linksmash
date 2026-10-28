@@ -31,7 +31,7 @@ function generateFolderId(): string {
  * @throws Error if storage operation fails
  */
 export async function saveFolder(
-  folder: Omit<Folder, "id" | "createdAt"> & { id?: string }
+  folder: Omit<Folder, "id" | "createdAt"> & { id?: string; createdAt?: string }
 ): Promise<string> {
   try {
     // Validate folder data

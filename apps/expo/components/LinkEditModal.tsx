@@ -3,6 +3,8 @@
  *
  * This modal appears when a link is shared to the app (if "allow editing before save" is enabled).
  * It allows users to edit link details before saving, with automatic metadata fetching.
+ * Fields stay editable while metadata loads, and fetched values never overwrite
+ * anything the user has already typed.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -14,14 +16,21 @@ import {
   Modal,
   TouchableOpacity,
   ActivityIndicator,
-  useColorScheme,
+  Animated,
+  Easing,
+  Pressable,
+  Platform,
+  Dimensions,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import { LinkData } from "../types/link";
 import { fetchLinkMetadata } from "../services/metadata";
 import { saveLink } from "../services/storage";
 import { Toast } from "./Toast";
 import { FolderSelector } from "./FolderSelector";
+import { Theme, radius, useThemedStyles } from "../utils/theme";
 
 /**
  * Props for the LinkEditModal component
@@ -38,13 +47,13 @@ interface LinkEditModalProps {
   onSave: () => void;
 }
 
+type EditableField = "title" | "description" | "image" | "tag";
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+
 /**
  * LinkEditModal component for editing link details before saving
  *
- * @param visible - Whether the modal is visible
- * @param linkData - The initial link data
- * @param onClose - Callback when modal closes
- * @param onSave - Callback after save
  * @returns JSX.Element - The rendered modal component
  */
 export const LinkEditModal: React.FC<LinkEditModalProps> = ({
@@ -53,8 +62,8 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
+  const { theme, styles } = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const [title, setTitle] = useState<string>(linkData.title || "");
   const [description, setDescription] = useState<string>(
     linkData.description || ""
@@ -65,6 +74,7 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
     linkData.folderId || null
   );
   const [fetchingMetadata, setFetchingMetadata] = useState<boolean>(false);
+  const [metadataFetched, setMetadataFetched] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
   const [showToast, setShowToast] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>("");
@@ -72,64 +82,139 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
   const descriptionInputRef = useRef<TextInput | null>(null);
   const imageInputRef = useRef<TextInput | null>(null);
   const tagInputRef = useRef<TextInput | null>(null);
+  const editedFieldsRef = useRef<Set<EditableField>>(new Set());
+  const closingRef = useRef(false);
+
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   /**
-   * Fetches metadata from the API and populates form fields
-   * Memoized with useCallback to prevent stale closures
+   * Wraps a setter so we remember the user touched this field
    */
-  const fetchMetadata = useCallback(async () => {
-    // Validate that linkData has a valid URL before fetching
-    if (!linkData || !linkData.url || linkData.url.trim() === "") {
-      console.warn("Cannot fetch metadata: invalid or missing URL");
-      return;
-    }
+  const editField =
+    (field: EditableField, setter: (value: string) => void) =>
+    (value: string) => {
+      editedFieldsRef.current.add(field);
+      setter(value);
+    };
 
-    try {
-      setFetchingMetadata(true);
-      const fetchedMetadata = await fetchLinkMetadata(linkData.url);
+  /**
+   * Fetches metadata and fills in fields the user hasn't edited yet
+   */
+  const fetchMetadata = useCallback(
+    async (isActive: () => boolean) => {
+      // Validate that linkData has a valid URL before fetching
+      if (!linkData || !linkData.url || linkData.url.trim() === "") {
+        console.warn("Cannot fetch metadata: invalid or missing URL");
+        return;
+      }
 
-      // Populate form fields with fetched metadata, preserving existing values if fetched ones are empty
-      if (fetchedMetadata.title) {
-        setTitle(fetchedMetadata.title);
+      try {
+        setFetchingMetadata(true);
+        const fetchedMetadata = await fetchLinkMetadata(linkData.url);
+        if (!isActive()) return;
+
+        const edited = editedFieldsRef.current;
+        if (fetchedMetadata.title && !edited.has("title")) {
+          setTitle(fetchedMetadata.title);
+        }
+        if (fetchedMetadata.description && !edited.has("description")) {
+          setDescription(fetchedMetadata.description);
+        }
+        if (fetchedMetadata.image && !edited.has("image")) {
+          setImage(fetchedMetadata.image);
+        }
+        if (fetchedMetadata.tag && !edited.has("tag")) {
+          setTag(fetchedMetadata.tag);
+        }
+        setMetadataFetched(true);
+      } catch (error) {
+        console.error("Error fetching metadata:", error);
+        if (!isActive()) return;
+        setToastMessage("Couldn't fetch link details — you can still save.");
+        setShowToast(true);
+      } finally {
+        if (isActive()) setFetchingMetadata(false);
       }
-      if (fetchedMetadata.description) {
-        setDescription(fetchedMetadata.description);
-      }
-      if (fetchedMetadata.image) {
-        setImage(fetchedMetadata.image);
-      }
-      if (fetchedMetadata.tag) {
-        setTag(fetchedMetadata.tag);
-      }
-    } catch (error) {
-      console.error("Error fetching metadata:", error);
-      // Show toast error but don't overwrite existing form values
-      setToastMessage("Unable to fetch link details. Using default values.");
-      setShowToast(true);
-    } finally {
-      setFetchingMetadata(false);
-    }
-  }, [linkData.url]);
+    },
+    [linkData.url]
+  );
 
   /**
    * Resets form fields when modal opens with new link data
    */
   useEffect(() => {
-    if (visible && linkData && linkData.url) {
-      // Initialize form fields from linkData
-      setTitle(linkData.title || "");
-      setDescription(linkData.description || "");
-      setImage(linkData.image || "");
-      setTag(linkData.tag || "");
-      setFolderId(linkData.folderId || null);
-      setFetchingMetadata(false);
-      setSaving(false);
-      setShowToast(false);
+    if (!visible || !linkData || !linkData.url) return;
+    let active = true;
 
-      // Auto-fetch metadata when modal opens
-      fetchMetadata();
-    }
+    // Initialize form fields from linkData
+    setTitle(linkData.title || "");
+    setDescription(linkData.description || "");
+    setImage(linkData.image || "");
+    setTag(linkData.tag || "");
+    setFolderId(linkData.folderId || null);
+    setMetadataFetched(false);
+    setSaving(false);
+    setShowToast(false);
+    editedFieldsRef.current = new Set();
+    closingRef.current = false;
+
+    // Auto-fetch metadata when modal opens
+    fetchMetadata(() => active);
+    return () => {
+      active = false;
+    };
   }, [visible, linkData.url, fetchMetadata]);
+
+  /**
+   * Animate the sheet in when shown
+   */
+  useEffect(() => {
+    if (!visible) return;
+    backdropOpacity.setValue(0);
+    sheetTranslateY.setValue(SCREEN_HEIGHT);
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.spring(sheetTranslateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 22,
+        stiffness: 210,
+        mass: 0.9,
+      }),
+    ]).start();
+  }, [visible, linkData.url, backdropOpacity, sheetTranslateY]);
+
+  /**
+   * Animate out, then notify the parent
+   */
+  const animateClose = useCallback(
+    (after?: () => void) => {
+      if (closingRef.current) return;
+      closingRef.current = true;
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sheetTranslateY, {
+          toValue: SCREEN_HEIGHT,
+          duration: 220,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        after?.();
+        onClose();
+      });
+    },
+    [backdropOpacity, sheetTranslateY, onClose]
+  );
 
   /**
    * Handles saving the link with edited values
@@ -146,17 +231,19 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
         image: image.trim() || null,
         tag: tag.trim() || null,
         folderId: folderId,
-        metadataFetched: true,
+        // If the fetch hasn't finished and nothing was edited, let the card
+        // fetch it later; otherwise never overwrite the user's edits.
+        metadataFetched: metadataFetched || editedFieldsRef.current.size > 0,
       };
 
       // Save to storage
       await saveLink(updatedLinkData);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+        () => {}
+      );
 
-      // Call onSave callback to refresh the list
-      onSave();
-
-      // Close modal
-      onClose();
+      // Close modal, then refresh the list
+      animateClose(onSave);
     } catch (error) {
       console.error("Error saving link:", error);
       setToastMessage(
@@ -165,329 +252,307 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({
           : "Failed to save link. Please try again."
       );
       setShowToast(true);
-    } finally {
       setSaving(false);
     }
   };
 
-  const theme = {
-    background: isDarkMode ? "#0b0b0c" : "#ffffff",
-    surface: isDarkMode ? "#161718" : "#ffffff",
-    text: isDarkMode ? "#f2f4f7" : "#000000",
-    textMuted: isDarkMode ? "#c7c9ce" : "#666666",
-    border: isDarkMode ? "#2a2c2f" : "#e0e0e0",
-    backdrop: "rgba(0, 0, 0, 0.5)",
-  };
-
-  const styles = createStyles(theme);
-
   return (
-    <>
-      <Modal
-        visible={visible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={onClose}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Link Details</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            </View>
+    <Modal
+      visible={visible}
+      animationType="none"
+      transparent={true}
+      statusBarTranslucent
+      onRequestClose={() => animateClose()}
+    >
+      <View style={styles.root}>
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => animateClose()}
+            accessibilityLabel="Dismiss"
+          />
+        </Animated.View>
 
-            <View style={styles.modalContentWrapper}>
-              <KeyboardAwareScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                enableOnAndroid
-                keyboardShouldPersistTaps="handled"
-              >
-                {/* Loader overlay during metadata fetch */}
-                {fetchingMetadata && (
-                  <View style={styles.loaderOverlay}>
-                    <ActivityIndicator size="large" color="#0066cc" />
-                    <Text style={styles.loaderText}>Fetching metadata...</Text>
-                  </View>
+        <Animated.View
+          style={[
+            styles.modalContainer,
+            { transform: [{ translateY: sheetTranslateY }] },
+          ]}
+        >
+          <View style={styles.grabber} />
+          <View style={styles.modalHeader}>
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.modalTitle}>Save link</Text>
+              <View style={styles.statusRow}>
+                {fetchingMetadata ? (
+                  <>
+                    <ActivityIndicator size="small" color={theme.primary} />
+                    <Text style={styles.statusText}>Fetching details…</Text>
+                  </>
+                ) : (
+                  <Text style={styles.statusText} numberOfLines={1}>
+                    {linkData.url}
+                  </Text>
                 )}
-
-                {/* URL Field (Read-only) */}
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.label}>URL</Text>
-                  <TextInput
-                    style={[styles.input, styles.inputDisabled]}
-                    value={linkData.url}
-                    editable={false}
-                    selectTextOnFocus={false}
-                    placeholder="URL"
-                  />
-                  <Text style={styles.helpText}>URL cannot be modified</Text>
-                </View>
-
-                {/* Title Field */}
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.label}>Title</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={title}
-                    onChangeText={setTitle}
-                    placeholder="Enter title"
-                    autoCapitalize="sentences"
-                    autoCorrect={true}
-                    returnKeyType="next"
-                    onSubmitEditing={() => {
-                      descriptionInputRef.current?.focus();
-                    }}
-                    editable={!fetchingMetadata}
-                  />
-                </View>
-
-                {/* Description Field */}
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.label}>Description</Text>
-                  <TextInput
-                    ref={descriptionInputRef}
-                    style={[styles.input, styles.textArea]}
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholder="Enter description"
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    autoCapitalize="sentences"
-                    autoCorrect={true}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => {
-                      imageInputRef.current?.focus();
-                    }}
-                    editable={!fetchingMetadata}
-                  />
-                </View>
-
-                {/* Image URL Field */}
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.label}>Image URL</Text>
-                  <TextInput
-                    ref={imageInputRef}
-                    style={styles.input}
-                    value={image}
-                    onChangeText={setImage}
-                    placeholder="Enter image URL"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="url"
-                    returnKeyType="next"
-                    onSubmitEditing={() => {
-                      tagInputRef.current?.focus();
-                    }}
-                    editable={!fetchingMetadata}
-                  />
-                </View>
-
-                {/* Tag Field */}
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.label}>Tag</Text>
-                  <TextInput
-                    ref={tagInputRef}
-                    style={styles.input}
-                    value={tag}
-                    onChangeText={setTag}
-                    placeholder="Enter tag (e.g., shopping, news, social)"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="done"
-                    onSubmitEditing={() => tagInputRef.current?.blur()}
-                    editable={!fetchingMetadata}
-                  />
-                </View>
-
-                {/* Folder Field */}
-                <View style={styles.fieldContainer}>
-                  <Text style={styles.label}>Folder</Text>
-                  <FolderSelector
-                    selectedFolderId={folderId}
-                    onSelect={setFolderId}
-                  />
-                </View>
-              </KeyboardAwareScrollView>
-
-              {/* Save Button - Positioned absolutely at bottom */}
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                  style={[
-                    styles.saveButton,
-                    (saving || fetchingMetadata) && styles.saveButtonDisabled,
-                  ]}
-                  onPress={handleSave}
-                  disabled={saving || fetchingMetadata}
-                  activeOpacity={0.7}
-                >
-                  {saving ? (
-                    <View style={styles.buttonContent}>
-                      <ActivityIndicator size="small" color="#ffffff" />
-                      <Text style={[styles.saveButtonText, { marginLeft: 8 }]}>
-                        Saving...
-                      </Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.saveButtonText}>Save</Text>
-                  )}
-                </TouchableOpacity>
               </View>
             </View>
+            <TouchableOpacity
+              onPress={() => animateClose()}
+              style={styles.closeButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Close"
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
 
-      {/* Toast for error messages */}
-      <Toast
-        message={toastMessage}
-        visible={showToast}
-        onDismiss={() => setShowToast(false)}
-      />
-    </>
+          <KeyboardAwareScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            enableOnAndroid
+            extraScrollHeight={Platform.OS === "ios" ? 24 : 80}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* Title Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Title</Text>
+              <TextInput
+                style={styles.input}
+                value={title}
+                onChangeText={editField("title", setTitle)}
+                placeholder={fetchingMetadata ? "Loading…" : "Enter title"}
+                placeholderTextColor={theme.textSubtle}
+                autoCapitalize="sentences"
+                autoCorrect={true}
+                returnKeyType="next"
+                onSubmitEditing={() => {
+                  descriptionInputRef.current?.focus();
+                }}
+              />
+            </View>
+
+            {/* Description Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Description</Text>
+              <TextInput
+                ref={descriptionInputRef}
+                style={[styles.input, styles.textArea]}
+                value={description}
+                onChangeText={editField("description", setDescription)}
+                placeholder={
+                  fetchingMetadata ? "Loading…" : "Enter description"
+                }
+                placeholderTextColor={theme.textSubtle}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                autoCapitalize="sentences"
+                autoCorrect={true}
+              />
+            </View>
+
+            {/* Tag Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Tag</Text>
+              <TextInput
+                ref={tagInputRef}
+                style={styles.input}
+                value={tag}
+                onChangeText={editField("tag", setTag)}
+                placeholder="e.g. shopping, news, social"
+                placeholderTextColor={theme.textSubtle}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+                onSubmitEditing={() => imageInputRef.current?.focus()}
+              />
+            </View>
+
+            {/* Folder Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Folder</Text>
+              <FolderSelector
+                selectedFolderId={folderId}
+                onSelect={setFolderId}
+              />
+            </View>
+
+            {/* Image URL Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Image URL</Text>
+              <TextInput
+                ref={imageInputRef}
+                style={styles.input}
+                value={image}
+                onChangeText={editField("image", setImage)}
+                placeholder="https://…"
+                placeholderTextColor={theme.textSubtle}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="done"
+              />
+            </View>
+          </KeyboardAwareScrollView>
+
+          {/* Save Button */}
+          <View
+            style={[
+              styles.buttonContainer,
+              { paddingBottom: Math.max(insets.bottom, 12) + 4 },
+            ]}
+          >
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={handleSave}
+              disabled={saving}
+              activeOpacity={0.8}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color={theme.onPrimary} />
+              ) : (
+                <Text style={styles.saveButtonText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* Toast inside the Modal so it renders above the sheet */}
+        <Toast
+          message={toastMessage}
+          visible={showToast}
+          onDismiss={() => setShowToast(false)}
+          bottomOffset={96}
+        />
+      </View>
+    </Modal>
   );
 };
 
 /**
  * Styles for the LinkEditModal component
  */
-function createStyles(theme: {
-  background: string;
-  surface: string;
-  text: string;
-  textMuted: string;
-  border: string;
-  backdrop: string;
-}) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
-    modalOverlay: {
+    root: {
       flex: 1,
-      backgroundColor: theme.backdrop,
       justifyContent: "flex-end",
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.backdrop,
     },
     modalContainer: {
       backgroundColor: theme.surface,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      maxHeight: "82%",
-      minHeight: "70%",
-      position: "relative",
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      height: "82%",
+      shadowColor: theme.shadow,
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 16,
+      elevation: 16,
+    },
+    grabber: {
+      alignSelf: "center",
+      width: 40,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: theme.border,
+      marginTop: 8,
     },
     modalHeader: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 14,
+    },
+    headerTextWrap: {
+      flex: 1,
+      marginRight: 12,
     },
     modalTitle: {
-      fontSize: 18,
-      fontWeight: "600",
+      fontSize: 20,
+      fontWeight: "700",
       color: theme.text,
     },
+    statusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 4,
+      minHeight: 20,
+    },
+    statusText: {
+      flexShrink: 1,
+      fontSize: 13,
+      color: theme.textMuted,
+    },
     closeButton: {
-      padding: 4,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.inputBg,
+      justifyContent: "center",
+      alignItems: "center",
     },
     closeButtonText: {
-      fontSize: 24,
+      fontSize: 14,
       color: theme.textMuted,
-      fontWeight: "300",
-    },
-    modalContentWrapper: {
-      flex: 1,
-      position: "relative",
+      fontWeight: "700",
     },
     scrollView: {
       flex: 1,
     },
     scrollContent: {
-      paddingHorizontal: 16,
-      paddingBottom: 100,
-    },
-    loaderOverlay: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(255, 255, 255, 0.9)",
-      justifyContent: "center",
-      alignItems: "center",
-      zIndex: 10,
-    },
-    loaderText: {
-      marginTop: 12,
-      fontSize: 14,
-      color: theme.textMuted,
+      paddingHorizontal: 20,
+      paddingBottom: 12,
     },
     fieldContainer: {
-      marginBottom: 24,
+      marginBottom: 16,
     },
     label: {
-      fontSize: 16,
+      fontSize: 13,
       fontWeight: "600",
-      color: theme.text,
-      marginBottom: 8,
+      color: theme.textMuted,
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: 0.4,
     },
     input: {
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      padding: 12,
+      borderRadius: radius.md,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       fontSize: 16,
       color: theme.text,
-      backgroundColor: theme.background,
-    },
-    inputDisabled: {
-      backgroundColor: theme.background === "#0b0b0c" ? "#1a1a1a" : "#f5f5f5",
-      color: theme.textMuted,
+      backgroundColor: theme.inputBg,
     },
     textArea: {
-      minHeight: 100,
+      minHeight: 96,
       paddingTop: 12,
     },
-    helpText: {
-      fontSize: 12,
-      color: theme.textMuted,
-      marginTop: 4,
-    },
     buttonContainer: {
-      position: "absolute",
-      bottom: 0,
-      left: 0,
-      right: 0,
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 16,
+      paddingHorizontal: 20,
+      paddingTop: 10,
       backgroundColor: theme.surface,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
     },
     saveButton: {
-      backgroundColor: "#0066cc",
-      borderRadius: 8,
-      paddingVertical: 14,
+      backgroundColor: theme.primary,
+      borderRadius: radius.md,
+      height: 50,
       alignItems: "center",
       justifyContent: "center",
-      width: "100%",
     },
     saveButtonDisabled: {
       opacity: 0.6,
     },
-    buttonContent: {
-      flexDirection: "row",
-      alignItems: "center",
-    },
     saveButtonText: {
-      color: "#ffffff",
+      color: theme.onPrimary,
       fontSize: 16,
-      fontWeight: "600",
+      fontWeight: "700",
     },
   });
 }

@@ -3,7 +3,7 @@
  *
  * This is the main application component that handles:
  * - Setting up React Navigation
- * - Receiving shared links from other apps
+ * - Receiving shared links from other apps (via expo-share-intent)
  * - Fetching metadata for shared links
  * - Storing links in local storage
  * - Displaying stored links in a list
@@ -25,18 +25,19 @@ import {
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
-  useColorScheme,
   TextInput,
   Share,
   Animated,
-  AppState,
-  InteractionManager,
+  Platform,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  ListRenderItem,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  GestureHandlerRootView,
-  Swipeable,
-} from "react-native-gesture-handler";
+  SafeAreaProvider,
+  SafeAreaView,
+} from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   NavigationContainer,
   useFocusEffect,
@@ -46,23 +47,31 @@ import {
 } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import ReceiveSharingIntent from "react-native-receive-sharing-intent";
+import {
+  ShareIntent,
+  ShareIntentProvider,
+  useShareIntentContext,
+} from "expo-share-intent";
+import * as Haptics from "expo-haptics";
 import { LinkData } from "./types/link";
 import {
   saveLink,
   getLinks,
   deleteLink,
   getAllowEditingBeforeSave,
+  normalizeUrl,
 } from "./services/storage";
-import { LinkCard } from "./components/LinkCard";
+import { LINK_ROW_HEIGHT } from "./components/LinkCard";
+import { SwipeableLinkRow } from "./components/SwipeableLinkRow";
 import { SafeAreaWrapper } from "./components/SafeAreaWrapper";
+import { ToastProvider, useToast } from "./components/Toast";
 import { EditLinkScreen } from "./screens/EditLinkScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { FoldersScreen } from "./screens/FoldersScreen";
 import { FolderDetailScreen } from "./screens/FolderDetailScreen";
 import { LinkEditModal } from "./components/LinkEditModal";
 import { processLinkWithoutAPI } from "./services/linkProcessor";
-import { useTheme, createTheme } from "./utils/theme";
+import { Theme, radius, useTheme, useThemedStyles } from "./utils/theme";
 import { getFolders } from "./services/folderStorage";
 import { Folder } from "./types/folder";
 
@@ -88,58 +97,112 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
  * No backend API required - metadata is fetched and parsed directly in the app
  */
 
+/**
+ * Sorts newest first and drops duplicate URLs (older app versions stored them)
+ */
+function sortAndDedupeLinks(storedLinks: LinkData[]): LinkData[] {
+  const seen = new Set<string>();
+  return [...storedLinks]
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    .filter((link) => {
+      const key = normalizeUrl(link.url);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/**
+ * Pulls the text/URL and attached images out of a share intent
+ */
+function extractSharedContent(intent: ShareIntent): {
+  content: string | null;
+  images: string[];
+  subject: string | null;
+} {
+  const text = intent.text?.trim() || null;
+  const webUrl = intent.webUrl?.trim() || null;
+
+  // Keep the full text (the parser extracts title/description from it), but
+  // make sure the URL is present if the sender put it in a separate field.
+  let content = text;
+  if (webUrl && (!text || !text.includes(webUrl))) {
+    content = text ? `${text}\n${webUrl}` : webUrl;
+  }
+
+  const images = Array.from(
+    new Set(
+      (intent.files ?? [])
+        .filter((file) => file?.mimeType?.startsWith("image/") && file.path)
+        .map((file) => file.path.trim())
+    )
+  );
+
+  return { content, images, subject: intent.meta?.title?.trim() || null };
+}
+
 export default function App() {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
-  const theme = useMemo(() => createTheme(isDarkMode), [isDarkMode]);
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  return (
+    <ShareIntentProvider options={{ resetOnBackground: true }}>
+      <GestureHandlerRootView style={rootStyles.flex}>
+        <SafeAreaProvider>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ShareIntentProvider>
+  );
+}
+
+const rootStyles = StyleSheet.create({ flex: { flex: 1 } });
+
+function AppContent() {
+  const theme = useTheme();
+  const toast = useToast();
+  const { hasShareIntent, shareIntent, resetShareIntent, error: shareError } =
+    useShareIntentContext();
 
   const [links, setLinks] = useState<LinkData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [pendingLinkData, setPendingLinkData] = useState<LinkData | null>(null);
+  const handledIntentRef = useRef<ShareIntent | null>(null);
 
   /**
-   * Loads all stored links from AsyncStorage
+   * Loads all stored links from AsyncStorage.
+   * Only the very first load shows the full-screen spinner; later refreshes
+   * swap the data in place so the list never flashes or loses scroll position.
    */
   const loadStoredLinks = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const storedLinks = await getLinks();
-      // Sort links by creation date (newest first)
-      const uniqueLinks = storedLinks
-        .map((link) => ({
-          ...link,
-          normalizedUrl: link.url.toLowerCase().trim(),
-        }))
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-        .filter((link, index, array) => {
-          const firstIndex = array.findIndex(
-            (candidate) => candidate.normalizedUrl === link.normalizedUrl
-          );
-          return firstIndex === index;
-        })
-        .map((link) => {
-          const { normalizedUrl, ...rest } = link as LinkData & {
-            normalizedUrl?: string;
-          };
-          return rest;
-        });
-      setLinks(uniqueLinks);
+      setLinks(sortAndDedupeLinks(storedLinks));
     } catch (error) {
       console.error("Error loading stored links:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to load stored links";
-      setError(errorMessage);
+      toast.show(
+        error instanceof Error ? error.message : "Failed to load stored links"
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
+
+  /**
+   * Applies a partial update to one link in memory (e.g. fetched metadata)
+   */
+  const updateLinkInState = useCallback(
+    (url: string, patch: Partial<LinkData>) => {
+      setLinks((current) =>
+        current.map((link) =>
+          link.url === url ? { ...link, ...patch } : link
+        )
+      );
+    },
+    []
+  );
 
   /**
    * Handles processing a shared URL
@@ -149,263 +212,170 @@ export default function App() {
    *
    * @param input - The shared URL or text containing a URL to process
    * @param attachedImages - Optional array of attached image URIs
+   * @param subject - Optional title sent by the sharing app (EXTRA_SUBJECT)
    */
-  const handleSharedUrl = async (
-    input: string,
-    attachedImages: string[] = []
-  ) => {
-    const normalizedImages = Array.from(
-      new Set(
-        (attachedImages || [])
-          .filter((uri): uri is string => Boolean(uri && uri.trim()))
-          .map((uri) => uri.trim())
-      )
-    );
+  const handleSharedUrl = useCallback(
+    async (input: string, attachedImages: string[], subject: string | null) => {
+      try {
+        // Process link data
+        const linkData = processLinkWithoutAPI(input, attachedImages);
+        if (!linkData.title && subject) {
+          linkData.title = subject;
+        }
 
-    if (!input || input.trim() === "") {
-      console.warn("Empty input received, skipping");
-      setError("Received empty content, skipping");
+        // Check if "allow editing before save" is enabled
+        const allowEditing = await getAllowEditingBeforeSave();
+
+        if (allowEditing) {
+          setPendingLinkData(linkData);
+        } else {
+          await saveLink(linkData);
+          // Show it immediately, then reconcile with storage
+          setLinks((current) =>
+            sortAndDedupeLinks([linkData, ...current])
+          );
+          Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Success
+          ).catch(() => {});
+          toast.show("Link saved");
+          loadStoredLinks();
+        }
+      } catch (error) {
+        console.error("Error processing shared URL:", error);
+        toast.show(
+          error instanceof Error && error.message.includes("No valid URL")
+            ? "No link found in the shared content"
+            : "Couldn't save the shared link"
+        );
+      }
+    },
+    [loadStoredLinks, toast]
+  );
+
+  // Initial load
+  useEffect(() => {
+    loadStoredLinks();
+  }, [loadStoredLinks]);
+
+  /**
+   * Consume incoming share intents. The intent is cleared on the native side
+   * right away so it is never re-processed when the app resumes later
+   * (the old library re-read the stale intent on every foreground, which is
+   * what made the app look "stuck" when coming back from other apps).
+   */
+  useEffect(() => {
+    if (!hasShareIntent || handledIntentRef.current === shareIntent) return;
+    handledIntentRef.current = shareIntent;
+    const { content, images, subject } = extractSharedContent(shareIntent);
+    resetShareIntent();
+
+    if (!content) {
+      toast.show("No link found in the shared content");
       return;
     }
+    handleSharedUrl(content, images, subject);
+  }, [hasShareIntent, shareIntent, resetShareIntent, handleSharedUrl, toast]);
 
-    try {
-      setError(null);
-
-      // Process link data
-      const linkData = processLinkWithoutAPI(input, normalizedImages);
-
-      // Validate that linkData has a valid URL
-      if (!linkData || !linkData.url || linkData.url.trim() === "") {
-        throw new Error("Failed to extract valid URL from shared content");
-      }
-
-      // Check if "allow editing before save" is enabled
-      const allowEditing = await getAllowEditingBeforeSave();
-
-      if (allowEditing) {
-        // Show modal for editing
-        setPendingLinkData(linkData);
-        setModalVisible(true);
-      } else {
-        // Save immediately without modal
-        await saveLink(linkData);
-        // Defer list refresh to ensure UI re-renders after native callback completes
-        InteractionManager.runAfterInteractions(async () => {
-          await loadStoredLinks();
-        });
-      }
-    } catch (error) {
-      console.error("Error processing shared URL:", error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to process shared link";
-      setError(`Failed to process link: ${errorMessage}`);
+  useEffect(() => {
+    if (shareError) {
+      console.error("Error receiving shared content:", shareError);
+      toast.show("Couldn't read the shared content");
     }
-  };
+  }, [shareError, toast]);
 
   /**
    * Handles modal close
    */
-  const handleModalClose = () => {
-    setModalVisible(false);
+  const handleModalClose = useCallback(() => {
     setPendingLinkData(null);
-  };
+  }, []);
 
   /**
    * Handles modal save - refreshes the links list
    */
-  const handleModalSave = async () => {
+  const handleModalSave = useCallback(async () => {
+    toast.show("Link saved");
     await loadStoredLinks();
-  };
+  }, [loadStoredLinks, toast]);
 
-  useEffect(() => {
-    // Load stored links on app mount
-    loadStoredLinks();
-
-    // Set up listener for incoming shared content
-    const processSharedFiles = async (files: any[]) => {
-      if (!files || files.length === 0) {
-        console.log("No shared content received from intent.");
-        return;
-      }
-
-      const imageUris: string[] = [];
-      let primaryContent: string | null = null; // Changed to store full content, not just URL
-
-      for (const file of files) {
-        if (!file || typeof file !== "object") {
-          continue;
-        }
-
-        const mimeType: string | undefined = file.mimeType;
-        if (mimeType && mimeType.startsWith("image/")) {
-          const candidateUri: string | undefined =
-            file.filePath || file.contentUri || file.weblink || file.uri;
-          if (
-            candidateUri &&
-            !imageUris.includes(candidateUri) &&
-            candidateUri.trim() !== ""
-          ) {
-            imageUris.push(candidateUri);
-          }
-        }
-
-        // Collect full content (text + URL) for parsing
-        const rawContent: string | undefined =
-          file.weblink || file.text || file.url || file.contentUri;
-        if (rawContent && !primaryContent) {
-          // Store the full content, not just extracted URL
-          // This allows the parser to extract title/description from text+link combinations
-          primaryContent = rawContent;
-        }
-      }
-
-      if (primaryContent) {
-        // Pass full content to handleSharedUrl for parsing
-        await handleSharedUrl(primaryContent, imageUris);
-      } else if (imageUris.length > 0) {
-        console.warn(
-          "Shared content contained images but no valid URL. Images will be ignored."
-        );
-      } else {
-        console.warn("Received shared content without a usable URL.");
-      }
+  const navTheme = useMemo(() => {
+    const base = theme.isDark ? NavDarkTheme : NavLightTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: theme.primary,
+        background: theme.background,
+        card: theme.surface,
+        text: theme.text,
+        border: theme.border,
+      },
     };
-
-    const successHandler = async (files: any[]) => {
-      await processSharedFiles(files);
-    };
-
-    const errorHandler = (error: any) => {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
-      if (
-        errorMessage &&
-        !errorMessage.includes("NullPointerException") &&
-        !errorMessage.includes("null object reference")
-      ) {
-        console.error("Error receiving shared files:", error);
-        setError(`Error receiving shared content: ${errorMessage}`);
-      } else {
-        console.log("No shared content available (app opened normally)");
-      }
-    };
-
-    /**
-     * Invokes getReceivedFiles - deferred until AppState is 'active' to avoid
-     * getCurrentActivity() being null in production release builds (Hermes loads
-     * JS before Activity is attached).
-     * Called on every transition to 'active' to handle warm start (app in background,
-     * user shares link - onNewIntent delivers intent when app resumes).
-     */
-    const invokeGetReceivedFiles = () => {
-      ReceiveSharingIntent.getReceivedFiles(
-        successHandler,
-        errorHandler,
-        "ShareMedia" // Share extension name (can be customized)
-      );
-    };
-
-    const subscription = AppState.addEventListener(
-      "change",
-      (nextAppState: string) => {
-        if (nextAppState === "active") {
-          invokeGetReceivedFiles();
-        }
-      }
-    );
-
-    if (AppState.currentState === "active") {
-      invokeGetReceivedFiles();
-    }
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  /**
-   * Renders the empty state when no links are stored
-   */
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>No links saved yet</Text>
-      <Text style={styles.emptySubtext}>
-        Share a link from another app to get started
-      </Text>
-    </View>
-  );
-
-  /**
-   * Renders a loading indicator
-   */
-  const renderLoading = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#0066cc" />
-      <Text style={styles.loadingText}>Loading links...</Text>
-    </View>
-  );
+  }, [theme]);
 
   return (
-    <NavigationContainer theme={isDarkMode ? NavDarkTheme : NavLightTheme}>
-      <Stack.Navigator
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: theme.surface,
-          },
-          headerTintColor: theme.text,
-          headerTitleStyle: {
-            fontWeight: "600",
-          },
-        }}
-      >
-        <Stack.Screen name="Home" options={{ headerShown: false }}>
-          {() => (
-            <>
+    <>
+      <StatusBar style={theme.isDark ? "light" : "dark"} />
+      <NavigationContainer theme={navTheme}>
+        <Stack.Navigator
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: theme.surface,
+            },
+            headerTintColor: theme.text,
+            headerTitleStyle: {
+              fontWeight: "600",
+            },
+            headerShadowVisible: false,
+            headerBackButtonDisplayMode: "minimal",
+            contentStyle: { backgroundColor: theme.background },
+            animation: Platform.OS === "android" ? "slide_from_right" : "default",
+          }}
+        >
+          <Stack.Screen name="Home" options={{ headerShown: false }}>
+            {() => (
               <HomeScreen
                 links={links}
                 loading={loading}
-                error={error}
-                setError={setError}
                 loadStoredLinks={loadStoredLinks}
-                renderEmptyState={renderEmptyState}
-                renderLoading={renderLoading}
+                setLinks={setLinks}
+                updateLinkInState={updateLinkInState}
               />
-              {pendingLinkData && (
-                <LinkEditModal
-                  visible={modalVisible}
-                  linkData={pendingLinkData}
-                  onClose={handleModalClose}
-                  onSave={handleModalSave}
-                />
-              )}
-            </>
-          )}
-        </Stack.Screen>
-        <Stack.Screen
-          name="EditLink"
-          options={{ title: "Edit Link" }}
-          component={EditLinkScreen}
+            )}
+          </Stack.Screen>
+          <Stack.Screen
+            name="EditLink"
+            options={{ title: "Edit Link" }}
+            component={EditLinkScreen}
+          />
+          <Stack.Screen
+            name="Folders"
+            options={{ title: "Folders" }}
+            component={FoldersScreen}
+          />
+          <Stack.Screen
+            name="FolderDetail"
+            options={{ title: "Folder" }}
+            component={FolderDetailScreen}
+          />
+          <Stack.Screen
+            name="Settings"
+            options={{ title: "Settings" }}
+            component={SettingsScreen}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+
+      {/* Rendered outside the navigator so it shows on top of any screen */}
+      {pendingLinkData && (
+        <LinkEditModal
+          visible
+          linkData={pendingLinkData}
+          onClose={handleModalClose}
+          onSave={handleModalSave}
         />
-        <Stack.Screen
-          name="Folders"
-          options={{ title: "Folders" }}
-          component={FoldersScreen}
-        />
-        <Stack.Screen
-          name="FolderDetail"
-          options={{ title: "Folder" }}
-          component={FolderDetailScreen}
-        />
-        <Stack.Screen
-          name="Settings"
-          options={{ title: "Settings" }}
-          component={SettingsScreen}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+      )}
+    </>
   );
 }
 
@@ -417,11 +387,9 @@ export default function App() {
 interface HomeScreenProps {
   links: LinkData[];
   loading: boolean;
-  error: string | null;
-  setError: (error: string | null) => void;
   loadStoredLinks: () => Promise<void>;
-  renderEmptyState: () => React.ReactElement;
-  renderLoading: () => React.ReactElement;
+  setLinks: React.Dispatch<React.SetStateAction<LinkData[]>>;
+  updateLinkInState: (url: string, patch: Partial<LinkData>) => void;
 }
 
 /** Buffer (px) below which content is treated as non-scrollable */
@@ -430,31 +398,35 @@ const SCROLL_BUFFER = 20;
 const BOTTOM_PADDING_EXTRA = 50;
 /** Base bottom padding (px) for tab bar clearance */
 const TAB_BAR_BASE_PADDING = 80;
+/** How far (px) the tab bar slides down when hidden */
+const TAB_BAR_HIDE_OFFSET = 120;
+
+const getItemLayout = (_: unknown, index: number) => ({
+  length: LINK_ROW_HEIGHT,
+  offset: LINK_ROW_HEIGHT * index,
+  index,
+});
+
+const keyExtractor = (item: LinkData) => item.url;
 
 const HomeScreen: React.FC<HomeScreenProps> = ({
   links,
   loading,
-  error,
-  setError,
   loadStoredLinks,
-  renderEmptyState,
-  renderLoading,
+  setLinks,
+  updateLinkInState,
 }) => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
-  const theme = useMemo(() => createTheme(isDarkMode), [isDarkMode]);
-  const styles = useMemo(() => createStyles(theme), [theme]);
-  // Refresh links when screen comes into focus
+  const { theme, styles } = useThemedStyles(createStyles);
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"Home" | "Folders" | "Settings">("Home");
-  const [isTabBarVisible, setIsTabBarVisible] = useState<boolean>(true);
-  const [isContentScrollable, setIsContentScrollable] = useState<boolean>(true);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const scrollY = useRef(new Animated.Value(0)).current;
+  // Scroll-driven state lives in refs so scrolling never re-renders the list
+  const isTabBarVisibleRef = useRef(true);
+  const isContentScrollableRef = useRef(true);
   const lastScrollY = useRef(0);
   const tabBarTranslateY = useRef(new Animated.Value(0)).current;
   const contentHeightRef = useRef(0);
@@ -469,30 +441,20 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     return map;
   }, [folders]);
 
-  // Load folders
-  useEffect(() => {
-    const loadFolders = async () => {
-      try {
-        const allFolders = await getFolders();
-        setFolders(allFolders);
-      } catch (error) {
-        console.error("Error loading folders:", error);
-      }
-    };
-    loadFolders();
-  }, []);
-
-  // Keep tab bar visible when content is not scrollable (few items)
-  useEffect(() => {
-    if (!isContentScrollable) {
-      setIsTabBarVisible(true);
-      Animated.timing(tabBarTranslateY, {
-        toValue: 0,
-        duration: 200,
+  const setTabBarVisible = useCallback(
+    (visible: boolean) => {
+      if (isTabBarVisibleRef.current === visible) return;
+      isTabBarVisibleRef.current = visible;
+      Animated.spring(tabBarTranslateY, {
+        toValue: visible ? 0 : TAB_BAR_HIDE_OFFSET,
         useNativeDriver: true,
+        damping: 20,
+        stiffness: 200,
+        mass: 0.8,
       }).start();
-    }
-  }, [isContentScrollable]);
+    },
+    [tabBarTranslateY]
+  );
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -504,6 +466,13 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
     });
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
   }, [links]);
+
+  // Clear a tag filter whose last link was deleted / retagged
+  useEffect(() => {
+    if (selectedTag && !availableTags.includes(selectedTag)) {
+      setSelectedTag(null);
+    }
+  }, [availableTags, selectedTag]);
 
   const filteredLinks = useMemo(() => {
     let filtered = links;
@@ -532,303 +501,284 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // Reload links and folders when screen comes into focus (e.g., after editing)
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       loadStoredLinks();
-      const loadFolders = async () => {
-        try {
-          const allFolders = await getFolders();
-          setFolders(allFolders);
-        } catch (error) {
-          console.error("Error loading folders:", error);
-        }
-      };
-      loadFolders();
-      setActiveTab("Home");
-    }, [loadStoredLinks])
+      getFolders()
+        .then(setFolders)
+        .catch((error) => console.error("Error loading folders:", error));
+      setTabBarVisible(true);
+    }, [loadStoredLinks, setTabBarVisible])
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadStoredLinks();
     setRefreshing(false);
-  };
+  }, [loadStoredLinks]);
 
-  const handleTagPress = (tag: string) => {
+  const handleTagPress = useCallback((tag: string | null) => {
+    Haptics.selectionAsync().catch(() => {});
     setSelectedTag((current) => (current === tag ? null : tag));
-  };
+  }, []);
+
+  /**
+   * Deletes optimistically and offers an Undo
+   */
+  const handleDeleteLink = useCallback(
+    async (link: LinkData) => {
+      setLinks((current) => current.filter((l) => l.url !== link.url));
+      try {
+        await deleteLink(link.url);
+        toast.show("Link deleted", {
+          actionLabel: "Undo",
+          onAction: async () => {
+            try {
+              await saveLink(link);
+            } finally {
+              loadStoredLinks();
+            }
+          },
+        });
+      } catch (e) {
+        console.error("Failed to delete link:", e);
+        toast.show("Failed to delete link");
+        loadStoredLinks();
+      }
+    },
+    [loadStoredLinks, setLinks, toast]
+  );
+
+  const handleShareLink = useCallback(
+    async (link: LinkData) => {
+      try {
+        await Share.share({ message: link.url });
+      } catch (e) {
+        console.error("Failed to share link:", e);
+        toast.show("Failed to share link");
+      }
+    },
+    [toast]
+  );
 
   const updateScrollability = useCallback(() => {
     const scrollable =
       contentHeightRef.current > layoutHeightRef.current + SCROLL_BUFFER;
-    setIsContentScrollable(scrollable);
-  }, []);
+    isContentScrollableRef.current = scrollable;
+    // Keep tab bar visible when content is not scrollable (few items)
+    if (!scrollable) setTabBarVisible(true);
+  }, [setTabBarVisible]);
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const currentScrollY = event.nativeEvent.contentOffset.y;
+      const scrollDifference = currentScrollY - lastScrollY.current;
+
+      if (
+        scrollDifference > 10 &&
+        currentScrollY > 10 &&
+        isContentScrollableRef.current
+      ) {
+        // Scrolling down: hide tab bar
+        setTabBarVisible(false);
+      } else if (scrollDifference < -10 || currentScrollY <= 0) {
+        // Scrolling up or back at the top: show tab bar
+        setTabBarVisible(true);
+      }
+
+      lastScrollY.current = currentScrollY;
+    },
+    [setTabBarVisible]
+  );
+
+  const renderItem: ListRenderItem<LinkData> = useCallback(
+    ({ item }) => (
+      <SwipeableLinkRow
+        linkData={item}
+        folderName={item.folderId ? folderMap.get(item.folderId) || null : null}
+        onDelete={handleDeleteLink}
+        onShare={handleShareLink}
+        onMetadataFetched={updateLinkInState}
+      />
+    ),
+    [folderMap, handleDeleteLink, handleShareLink, updateLinkInState]
+  );
+
+  const isFiltering = searchQuery.trim().length > 0 || selectedTag !== null;
+
+  /**
+   * Renders the empty state (distinguishes "nothing saved" from "no matches")
+   */
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyIcon}>{isFiltering ? "🔍" : "🔗"}</Text>
+      <Text style={styles.emptyText}>
+        {isFiltering ? "No matching links" : "No links saved yet"}
+      </Text>
+      <Text style={styles.emptySubtext}>
+        {isFiltering
+          ? "Try a different search or tag"
+          : "Share a link from any app and pick LinkSmash to save it here"}
+      </Text>
+    </View>
+  );
+
+  const renderTabItem = (
+    label: string,
+    icon: string,
+    active: boolean,
+    onPress: () => void
+  ) => (
+    <TouchableOpacity
+      key={label}
+      style={styles.bottomTabItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+    >
+      <View style={[styles.bottomTabIconWrap, active && styles.bottomTabIconWrapActive]}>
+        <Text style={styles.bottomTabIcon}>{icon}</Text>
+      </View>
+      <Text
+        style={[styles.bottomTabLabel, active && styles.bottomTabLabelActive]}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaWrapper style={styles.safeArea}>
-      <GestureHandlerRootView style={styles.container}>
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
+    <SafeAreaWrapper edges={["top", "left", "right"]}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.primary} />
+        </View>
+      ) : (
+        <>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>LinkSmash</Text>
+            <Text style={styles.headerCount}>
+              {links.length} {links.length === 1 ? "link" : "links"}
+            </Text>
+          </View>
 
-        {loading ? (
-          renderLoading()
-        ) : (
-          <>
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchField}>
+              <Text style={styles.searchIcon}>⌕</Text>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search links..."
-                placeholderTextColor={theme.textMuted}
+                placeholder="Search links"
+                placeholderTextColor={theme.textSubtle}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoCapitalize="none"
                 autoCorrect={false}
+                returnKeyType="search"
+                clearButtonMode="never"
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity
                   style={styles.clearButton}
                   onPress={() => setSearchQuery("")}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   activeOpacity={0.7}
                 >
                   <Text style={styles.clearButtonText}>✕</Text>
                 </TouchableOpacity>
               )}
             </View>
-
-            {availableTags.length > 0 && (
-              <View style={styles.tagBarContainer}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.tagBarContent}
-                >
-                  {availableTags.map((tag) => {
-                    const isSelected = selectedTag === tag;
-                    return (
-                      <TouchableOpacity
-                        key={tag}
-                        style={[
-                          styles.tagChip,
-                          isSelected && styles.tagChipSelected,
-                        ]}
-                        onPress={() => handleTagPress(tag)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.tagChipText,
-                            isSelected && styles.tagChipTextSelected,
-                          ]}
-                        >
-                          {tag}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
-
-            <FlatList
-              data={filteredLinks}
-              keyExtractor={(item, index) => `${item.url}-${index}`}
-              renderItem={({ item, index }) => (
-                <Swipeable
-                  renderRightActions={() => (
-                    <View style={styles.swipeDeleteContainer}>
-                      <Text
-                        style={styles.swipeDeleteText}
-                        onPress={async () => {
-                          try {
-                            await deleteLink(item.url);
-                            await loadStoredLinks();
-                          } catch (e) {
-                            console.error("Failed to delete link:", e);
-                            setError("Failed to delete link");
-                          }
-                        }}
-                      >
-                        Delete
-                      </Text>
-                    </View>
-                  )}
-                  renderLeftActions={() => (
-                    <View style={styles.swipeShareContainer}>
-                      <Text
-                        style={styles.swipeShareText}
-                        onPress={async () => {
-                          try {
-                            await Share.share({
-                              message: item.url,
-                            });
-                          } catch (e) {
-                            console.error("Failed to share link:", e);
-                            setError("Failed to share link");
-                          }
-                        }}
-                      >
-                        Share
-                      </Text>
-                    </View>
-                  )}
-                >
-                  <LinkCard
-                    linkData={item}
-                    index={index}
-                    folderName={item.folderId ? folderMap.get(item.folderId) || null : null}
-                  />
-                </Swipeable>
-              )}
-              ListEmptyComponent={renderEmptyState}
-              contentContainerStyle={
-                filteredLinks.length === 0
-                  ? styles.emptyListContainer
-                  : {
-                      paddingTop: 12,
-                      paddingBottom: TAB_BAR_BASE_PADDING + BOTTOM_PADDING_EXTRA,
-                    }
-              }
-              showsVerticalScrollIndicator={true}
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                {
-                  useNativeDriver: false,
-                  listener: (event: any) => {
-                    const currentScrollY = event.nativeEvent.contentOffset.y;
-                    const scrollDifference =
-                      currentScrollY - lastScrollY.current;
-
-                    // Hide tab bar when scrolling down (only if content is scrollable)
-                    if (
-                      scrollDifference > 10 &&
-                      isTabBarVisible &&
-                      currentScrollY > 10 &&
-                      isContentScrollable
-                    ) {
-                      setIsTabBarVisible(false);
-                      Animated.timing(tabBarTranslateY, {
-                        toValue: 100,
-                        duration: 200,
-                        useNativeDriver: true,
-                      }).start();
-                    }
-                    // Show tab bar when scrolling down past 10px threshold (negative difference means scrolling up in content)
-                    else if (scrollDifference < -10 && !isTabBarVisible) {
-                      setIsTabBarVisible(true);
-                      Animated.timing(tabBarTranslateY, {
-                        toValue: 0,
-                        duration: 200,
-                        useNativeDriver: true,
-                      }).start();
-                    }
-
-                    lastScrollY.current = currentScrollY;
-                  },
-                }
-              )}
-              scrollEventThrottle={16}
-              onContentSizeChange={(_, height) => {
-                contentHeightRef.current = height;
-                updateScrollability();
-              }}
-              onLayout={(e) => {
-                layoutHeightRef.current = e.nativeEvent.layout.height;
-                updateScrollability();
-              }}
-            />
-          </>
-        )}
-
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <Text style={styles.errorDismiss} onPress={() => setError(null)}>
-              Dismiss
-            </Text>
           </View>
-        )}
 
-        {/* Bottom Tab Navigation */}
-        <Animated.View
-          style={[
-            styles.bottomTabBar,
-            {
-              transform: [
-                {
-                  translateY: tabBarTranslateY,
-                },
-              ],
-            },
-          ]}
-        >
-          <SafeAreaView edges={["bottom"]} style={styles.bottomTabSafeArea}>
-            <TouchableOpacity
-              style={[
-                styles.bottomTabItem,
-                activeTab === "Home" && styles.bottomTabItemActive,
-              ]}
-              onPress={() => {
-                setActiveTab("Home");
-                // Already on Home screen, no navigation needed
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.bottomTabIcon}>🏠</Text>
-              <Text
-                style={[
-                  styles.bottomTabLabel,
-                  activeTab === "Home" && styles.bottomTabLabelActive,
-                ]}
+          {availableTags.length > 0 && (
+            <View style={styles.tagBarContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tagBarContent}
+                keyboardShouldPersistTaps="handled"
               >
-                Home
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.bottomTabItem,
-                activeTab === "Folders" && styles.bottomTabItemActive,
-              ]}
-              onPress={() => {
-                setActiveTab("Folders");
-                navigation.navigate("Folders");
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.bottomTabIcon}>📁</Text>
-              <Text
-                style={[
-                  styles.bottomTabLabel,
-                  activeTab === "Folders" && styles.bottomTabLabelActive,
-                ]}
-              >
-                Folders
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.bottomTabItem,
-                activeTab === "Settings" && styles.bottomTabItemActive,
-              ]}
-              onPress={() => {
-                setActiveTab("Settings");
-                navigation.navigate("Settings");
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.bottomTabIcon}>⚙️</Text>
-              <Text
-                style={[
-                  styles.bottomTabLabel,
-                  activeTab === "Settings" && styles.bottomTabLabelActive,
-                ]}
-              >
-                Settings
-              </Text>
-            </TouchableOpacity>
-          </SafeAreaView>
-        </Animated.View>
-      </GestureHandlerRootView>
+                {[null, ...availableTags].map((tag) => {
+                  const isSelected = selectedTag === tag;
+                  return (
+                    <TouchableOpacity
+                      key={tag ?? "__all"}
+                      style={[
+                        styles.tagChip,
+                        isSelected && styles.tagChipSelected,
+                      ]}
+                      onPress={() => handleTagPress(tag)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.tagChipText,
+                          isSelected && styles.tagChipTextSelected,
+                        ]}
+                      >
+                        {tag ?? "All"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          <FlatList
+            data={filteredLinks}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            getItemLayout={getItemLayout}
+            initialNumToRender={10}
+            maxToRenderPerBatch={8}
+            windowSize={11}
+            removeClippedSubviews={Platform.OS === "android"}
+            ListEmptyComponent={renderEmptyState}
+            contentContainerStyle={
+              filteredLinks.length === 0
+                ? styles.emptyListContainer
+                : {
+                    paddingTop: 6,
+                    paddingBottom: TAB_BAR_BASE_PADDING + BOTTOM_PADDING_EXTRA,
+                  }
+            }
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            onScroll={handleScroll}
+            scrollEventThrottle={32}
+            onContentSizeChange={(_, height) => {
+              contentHeightRef.current = height;
+              updateScrollability();
+            }}
+            onLayout={(e) => {
+              layoutHeightRef.current = e.nativeEvent.layout.height;
+              updateScrollability();
+            }}
+          />
+        </>
+      )}
+
+      {/* Bottom Tab Navigation */}
+      <Animated.View
+        style={[
+          styles.bottomTabBar,
+          { transform: [{ translateY: tabBarTranslateY }] },
+        ]}
+      >
+        <SafeAreaView edges={["bottom"]} style={styles.bottomTabSafeArea}>
+          {renderTabItem("Home", "🏠", true, () => {})}
+          {renderTabItem("Folders", "📁", false, () =>
+            navigation.navigate("Folders")
+          )}
+          {renderTabItem("Settings", "⚙️", false, () =>
+            navigation.navigate("Settings")
+          )}
+        </SafeAreaView>
+      </Animated.View>
     </SafeAreaWrapper>
   );
 };
@@ -836,62 +786,80 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
 /**
  * Styles for the App component (dynamic by theme)
  */
-function createStyles(theme: ReturnType<typeof createTheme>) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: theme.background,
+    header: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 4,
     },
-    container: {
-      flex: 1,
-      backgroundColor: theme.background,
+    headerTitle: {
+      fontSize: 28,
+      fontWeight: "800",
+      color: theme.text,
+      letterSpacing: -0.5,
     },
-    tagBarContainer: {
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
-      backgroundColor: theme.surface,
-    },
-    tagBarContent: {
-      gap: 8,
-      alignItems: "center",
+    headerCount: {
+      fontSize: 13,
+      color: theme.textSubtle,
+      fontWeight: "500",
     },
     searchContainer: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    searchField: {
       flexDirection: "row",
       alignItems: "center",
-      paddingHorizontal: 16,
-      paddingVertical: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border,
-      backgroundColor: theme.surface,
+      height: 42,
+      borderRadius: radius.md,
+      backgroundColor: theme.inputBg,
+      paddingHorizontal: 12,
+    },
+    searchIcon: {
+      fontSize: 18,
+      color: theme.textSubtle,
+      marginRight: 6,
     },
     searchInput: {
       flex: 1,
-      height: 40,
-      borderWidth: 1,
-      borderColor: theme.border,
-      borderRadius: 8,
-      paddingHorizontal: 12,
+      height: "100%",
       fontSize: 16,
       color: theme.text,
-      backgroundColor: theme.background,
+      paddingVertical: 0,
     },
     clearButton: {
       marginLeft: 8,
-      padding: 8,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: theme.textSubtle,
+      justifyContent: "center",
+      alignItems: "center",
     },
     clearButtonText: {
-      fontSize: 18,
-      color: theme.textMuted,
-      fontWeight: "300",
+      fontSize: 11,
+      color: theme.inputBg,
+      fontWeight: "700",
+    },
+    tagBarContainer: {
+      paddingBottom: 8,
+    },
+    tagBarContent: {
+      gap: 8,
+      paddingHorizontal: 16,
+      alignItems: "center",
     },
     tagChip: {
-      paddingVertical: 8,
-      paddingHorizontal: 8,
-      borderRadius: 16,
+      paddingVertical: 6,
+      paddingHorizontal: 14,
+      borderRadius: radius.pill,
       backgroundColor: theme.chipBg,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.chipBorder,
     },
     tagChipSelected: {
@@ -899,30 +867,37 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       borderColor: theme.chipSelectedBorder,
     },
     tagChipText: {
-      fontSize: 10,
+      fontSize: 13,
       color: theme.textMuted,
       fontWeight: "600",
+      textTransform: "capitalize",
     },
     tagChipTextSelected: {
-      color: "#ffffff",
+      color: theme.onPrimary,
     },
     emptyListContainer: {
       flexGrow: 1,
+      paddingBottom: TAB_BAR_BASE_PADDING,
     },
     emptyContainer: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-      paddingHorizontal: 32,
+      paddingHorizontal: 40,
+    },
+    emptyIcon: {
+      fontSize: 48,
+      marginBottom: 12,
     },
     emptyText: {
       fontSize: 20,
-      fontWeight: "bold",
+      fontWeight: "700",
       color: theme.text,
       marginBottom: 8,
     },
     emptySubtext: {
       fontSize: 14,
+      lineHeight: 20,
       color: theme.textMuted,
       textAlign: "center",
     },
@@ -930,73 +905,6 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
-    },
-    loadingText: {
-      marginTop: 16,
-      fontSize: 16,
-      color: theme.textMuted,
-    },
-    errorContainer: {
-      position: "absolute",
-      bottom: 20,
-      left: 16,
-      right: 16,
-      backgroundColor: theme.errorBg,
-      borderRadius: 8,
-      padding: 16,
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      shadowColor: "#000",
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    errorText: {
-      flex: 1,
-      fontSize: 14,
-      color: "#ffffff",
-      marginRight: 12,
-    },
-    errorDismiss: {
-      fontSize: 14,
-      color: "#ffffff",
-      fontWeight: "600",
-      textDecorationLine: "underline",
-    },
-    swipeDeleteContainer: {
-      backgroundColor: theme.errorBg,
-      justifyContent: "center",
-      alignItems: "flex-end",
-      paddingHorizontal: 20,
-      marginVertical: 6,
-      marginHorizontal: 16,
-      borderRadius: 8,
-      overflow: "hidden",
-    },
-    swipeDeleteText: {
-      color: "#ffffff",
-      fontWeight: "700",
-      fontSize: 16,
-    },
-    swipeShareContainer: {
-      backgroundColor: "#0066cc",
-      justifyContent: "center",
-      alignItems: "flex-start",
-      paddingHorizontal: 20,
-      marginVertical: 6,
-      marginHorizontal: 16,
-      borderRadius: 8,
-      overflow: "hidden",
-    },
-    swipeShareText: {
-      color: "#ffffff",
-      fontWeight: "700",
-      fontSize: 16,
     },
     bottomTabBar: {
       position: "absolute",
@@ -1006,33 +914,41 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       backgroundColor: theme.surface,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
-      shadowColor: "#000",
+      shadowColor: theme.shadow,
       shadowOffset: {
         width: 0,
         height: -2,
       },
-      shadowOpacity: 0.1,
-      shadowRadius: 3.84,
-      elevation: 5,
+      shadowOpacity: theme.isDark ? 0 : 0.06,
+      shadowRadius: 8,
+      elevation: 8,
     },
     bottomTabSafeArea: {
       flexDirection: "row",
       justifyContent: "space-around",
       alignItems: "center",
-      paddingVertical: 3,
+      paddingTop: 6,
+      paddingBottom: 4,
     },
     bottomTabItem: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      paddingVertical: 4,
+      paddingVertical: 2,
     },
-    bottomTabItemActive: {
-      // Active state styling if needed
+    bottomTabIconWrap: {
+      width: 56,
+      height: 30,
+      borderRadius: radius.pill,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: 2,
+    },
+    bottomTabIconWrapActive: {
+      backgroundColor: theme.primarySoft,
     },
     bottomTabIcon: {
-      fontSize: 24,
-      marginBottom: 4,
+      fontSize: 20,
     },
     bottomTabLabel: {
       fontSize: 12,
@@ -1040,8 +956,8 @@ function createStyles(theme: ReturnType<typeof createTheme>) {
       fontWeight: "500",
     },
     bottomTabLabelActive: {
-      color: "#0066cc",
-      fontWeight: "600",
+      color: theme.primary,
+      fontWeight: "700",
     },
   });
 }
