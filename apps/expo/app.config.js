@@ -24,7 +24,7 @@ module.exports = {
   expo: {
     name: "LinkSmash",
     slug: "LinkSmash",
-    version: "1.1.2",
+    version: "1.1.3",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "automatic",
